@@ -39,6 +39,3 @@ tokio.workspace = true
 
 [[example]]
 name = "retry_client"
-
-[[example]]
-name = "retry_client"

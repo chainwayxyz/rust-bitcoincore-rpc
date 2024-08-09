@@ -227,7 +227,7 @@ async fn main() {
     test_add_ban(&cl).await;
     test_set_network_active(&cl).await;
     test_get_index_info(&cl).await;
-    test_get_zmq_notifications(&cl);
+    test_get_zmq_notifications(&cl).await;
     test_stop(cl).await;
 }
 
@@ -282,7 +282,8 @@ async fn test_dump_private_key(cl: &Client) {
     let addr =
         cl.get_new_address(None, Some(json::AddressType::Bech32)).await.unwrap().assume_checked();
     let sk = cl.dump_private_key(&addr).await.unwrap();
-    assert_eq!(addr, Address::p2wpkh(&sk.public_key(&SECP), *NET).unwrap());
+    let public_key = CompressedPublicKey::from_private_key(&SECP, &sk).unwrap();
+    assert_eq!(addr, Address::p2wpkh(&public_key, *NET));
 }
 
 async fn test_generate(cl: &Client) {
@@ -1558,8 +1559,8 @@ async fn test_stop(cl: Client) {
     println!("Stopping: '{}'", cl.stop().await.unwrap());
 }
 
-fn test_get_zmq_notifications(cl: &Client) {
-    let mut zmq_info = cl.get_zmq_notifications().unwrap();
+async fn test_get_zmq_notifications(cl: &Client) {
+    let mut zmq_info = cl.get_zmq_notifications().await.unwrap();
 
     // it doesn't matter in which order Bitcoin Core returns the result,
     // but checking it is easier if it has a known order

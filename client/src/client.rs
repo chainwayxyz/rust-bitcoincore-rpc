@@ -15,10 +15,11 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::{fmt, result};
 
-use crate::{bitcoin, deserialize_hex};
-use async_trait::async_trait;
+use crate::bitcoin;
 use crate::bitcoin::consensus::encode;
+use async_trait::async_trait;
 use bitcoin::hex::DisplayHex;
+use bitcoincore_rpc_json::bitcoin::consensus::encode::deserialize_hex;
 use jsonrpc_async;
 use serde::{self, Serialize};
 use serde_json::{self};
@@ -340,7 +341,7 @@ pub trait RpcApi: Sized {
 
     async fn get_block(&self, hash: &bitcoin::BlockHash) -> Result<Block> {
         let hex: String = self.call("getblock", &[into_json(hash)?, 0.into()]).await?;
-        deserialize_hex(&hex)
+        Ok(deserialize_hex(&hex)?)
     }
 
     async fn get_block_hex(&self, hash: &bitcoin::BlockHash) -> Result<String> {
@@ -360,7 +361,7 @@ pub trait RpcApi: Sized {
 
     async fn get_block_header(&self, hash: &bitcoin::BlockHash) -> Result<bitcoin::block::Header> {
         let hex: String = self.call("getblockheader", &[into_json(hash)?, false.into()]).await?;
-        deserialize_hex(&hex)
+        Ok(deserialize_hex(&hex)?)
     }
 
     async fn get_block_header_info(
@@ -506,7 +507,7 @@ pub trait RpcApi: Sized {
         let mut args = [into_json(txid)?, into_json(false)?, opt_into_json(block_hash)?];
         let hex: String =
             self.call("getrawtransaction", handle_defaults(&mut args, &[null()])).await?;
-        deserialize_hex(&hex)
+        Ok(deserialize_hex(&hex)?)
     }
 
     async fn get_raw_transaction_hex(
@@ -811,7 +812,7 @@ pub trait RpcApi: Sized {
     ) -> Result<Transaction> {
         let hex: String =
             self.create_raw_transaction_hex(utxos, outs, locktime, replaceable).await?;
-        deserialize_hex(&hex)
+        Ok(deserialize_hex(&hex)?)
     }
 
     async fn decode_raw_transaction<R: RawTx>(
@@ -1307,8 +1308,8 @@ pub trait RpcApi: Sized {
     }
 
     /// Returns information about the active ZeroMQ notifications
-    fn get_zmq_notifications(&self) -> Result<Vec<json::GetZmqNotificationsResult>> {
-        self.call("getzmqnotifications", &[])
+    async fn get_zmq_notifications(&self) -> Result<Vec<json::GetZmqNotificationsResult>> {
+        self.call("getzmqnotifications", &[]).await
     }
 }
 
@@ -1359,7 +1360,8 @@ impl RpcApi for Client {
         args: &[serde_json::Value],
     ) -> Result<T> {
         let raw = serde_json::value::to_raw_value(args)?;
-        let req = self.client.build_request(&cmd, Some(&*raw));
+        let params = &[raw];
+        let req = self.client.build_request(&cmd, params);
         if log_enabled!(Debug) {
             debug!(target: "bitcoincore_rpc", "JSON-RPC request: {} {}", cmd, serde_json::Value::from(args));
         }
@@ -1384,7 +1386,8 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
                         debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {:?}", cmd, e);
                     }
                 } else if log_enabled!(Trace) {
-                    let def = serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
+                    let def =
+                        serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
                     trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
                 }

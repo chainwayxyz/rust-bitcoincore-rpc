@@ -17,6 +17,7 @@ use std::{fmt, result};
 
 use crate::{bitcoin, deserialize_hex};
 use async_trait::async_trait;
+use crate::bitcoin::consensus::encode;
 use bitcoin::hex::DisplayHex;
 use jsonrpc_async;
 use serde::{self, Serialize};
@@ -164,7 +165,7 @@ pub trait RawTx: Sized + Clone + Send {
 
 impl<'a> RawTx for &'a Transaction {
     fn raw_hex(self) -> String {
-        bitcoin::consensus::encode::serialize_hex(self)
+        encode::serialize_hex(self)
     }
 }
 
@@ -1304,6 +1305,11 @@ pub trait RpcApi: Sized {
     ) -> Result<json::ScanTxOutResult> {
         self.call("scantxoutset", &["start".into(), into_json(descriptors)?]).await
     }
+
+    /// Returns information about the active ZeroMQ notifications
+    fn get_zmq_notifications(&self) -> Result<Vec<json::GetZmqNotificationsResult>> {
+        self.call("getzmqnotifications", &[])
+    }
 }
 
 /// Client implements a JSON-RPC client for the Bitcoin Core daemon or compatible APIs.
@@ -1352,15 +1358,8 @@ impl RpcApi for Client {
         cmd: &str,
         args: &[serde_json::Value],
     ) -> Result<T> {
-        let raw_args: Vec<_> = args
-            .iter()
-            .map(|a| {
-                let json_string = serde_json::to_string(a)?;
-                serde_json::value::RawValue::from_string(json_string) // we can't use to_raw_value here due to compat with Rust 1.29
-            })
-            .map(|a| a.map_err(|e| Error::Json(e)))
-            .collect::<Result<Vec<_>>>()?;
-        let req = self.client.build_request(&cmd, &raw_args);
+        let raw = serde_json::value::to_raw_value(args)?;
+        let req = self.client.build_request(&cmd, Some(&*raw));
         if log_enabled!(Debug) {
             debug!(target: "bitcoincore_rpc", "JSON-RPC request: {} {}", cmd, serde_json::Value::from(args));
         }
@@ -1385,11 +1384,7 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
                         debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {:?}", cmd, e);
                     }
                 } else if log_enabled!(Trace) {
-                    // we can't use to_raw_value here due to compat with Rust 1.29
-                    let def = serde_json::value::RawValue::from_string(
-                        serde_json::Value::Null.to_string(),
-                    )
-                    .unwrap();
+                    let def = serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
                     trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
                 }

@@ -13,7 +13,7 @@ description = "JSON-enabled type structs for bitcoincore-rpc crate."
 keywords = ["crypto", "bitcoin", "bitcoin-core", "rpc"]
 readme = "README.md"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.70"
 
 [lib]
 name = "bitcoincore_rpc_json"

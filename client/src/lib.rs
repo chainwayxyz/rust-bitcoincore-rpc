@@ -26,7 +26,7 @@ pub extern crate jsonrpc_async;
 
 pub extern crate bitcoincore_rpc_json;
 pub use crate::json::bitcoin;
-use bitcoincore_rpc_json::bitcoin::io::Cursor;
+use bitcoincore_rpc_json::bitcoin::hex::FromHex;
 pub use bitcoincore_rpc_json as json;
 use json::bitcoin::consensus::{Decodable, ReadExt};
 
@@ -39,7 +39,8 @@ pub use crate::error::Error;
 pub use crate::queryable::*;
 
 fn deserialize_hex<T: Decodable>(hex: &str) -> Result<T> {
-    let mut reader = Cursor::new(hex.as_bytes());
+    let buf = Vec::<u8>::from_hex(hex)?;
+    let mut reader = buf.as_slice();
     let object = Decodable::consensus_decode(&mut reader)?;
     if reader.read_u8().is_ok() {
         Err(Error::BitcoinSerialization(bitcoin::consensus::encode::Error::ParseFailed(

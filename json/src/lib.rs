@@ -30,7 +30,7 @@ use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::sha256;
 use bitcoin::{
-    bip158, bip32, Address, Amount, CompactTarget, Network, PrivateKey, PublicKey, Script,
+    bip158, bip32, Address, Amount, Network, PrivateKey, PublicKey, Script,
     ScriptBuf, SignedAmount, Transaction,
 };
 use serde::de::Error as SerdeError;

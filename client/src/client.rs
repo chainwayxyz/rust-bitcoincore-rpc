@@ -15,11 +15,9 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::{fmt, result};
 
-use crate::bitcoin;
-use crate::bitcoin::consensus::encode;
+use crate::{bitcoin, deserialize_hex};
 use async_trait::async_trait;
 use bitcoin::hex::DisplayHex;
-use bitcoincore_rpc_json::bitcoin::consensus::encode::deserialize_hex;
 use jsonrpc_async;
 use serde::{self, Serialize};
 use serde_json::{self};
@@ -166,7 +164,7 @@ pub trait RawTx: Sized + Clone + Send {
 
 impl<'a> RawTx for &'a Transaction {
     fn raw_hex(self) -> String {
-        encode::serialize_hex(self)
+        bitcoin::consensus::encode::serialize_hex(self)
     }
 }
 
@@ -341,7 +339,7 @@ pub trait RpcApi: Sized {
 
     async fn get_block(&self, hash: &bitcoin::BlockHash) -> Result<Block> {
         let hex: String = self.call("getblock", &[into_json(hash)?, 0.into()]).await?;
-        Ok(deserialize_hex(&hex)?)
+        deserialize_hex(&hex)
     }
 
     async fn get_block_hex(&self, hash: &bitcoin::BlockHash) -> Result<String> {
@@ -361,7 +359,7 @@ pub trait RpcApi: Sized {
 
     async fn get_block_header(&self, hash: &bitcoin::BlockHash) -> Result<bitcoin::block::Header> {
         let hex: String = self.call("getblockheader", &[into_json(hash)?, false.into()]).await?;
-        Ok(deserialize_hex(&hex)?)
+        deserialize_hex(&hex)
     }
 
     async fn get_block_header_info(
@@ -507,7 +505,7 @@ pub trait RpcApi: Sized {
         let mut args = [into_json(txid)?, into_json(false)?, opt_into_json(block_hash)?];
         let hex: String =
             self.call("getrawtransaction", handle_defaults(&mut args, &[null()])).await?;
-        Ok(deserialize_hex(&hex)?)
+        deserialize_hex(&hex)
     }
 
     async fn get_raw_transaction_hex(
@@ -812,7 +810,7 @@ pub trait RpcApi: Sized {
     ) -> Result<Transaction> {
         let hex: String =
             self.create_raw_transaction_hex(utxos, outs, locktime, replaceable).await?;
-        Ok(deserialize_hex(&hex)?)
+        deserialize_hex(&hex)
     }
 
     async fn decode_raw_transaction<R: RawTx>(
@@ -1306,11 +1304,6 @@ pub trait RpcApi: Sized {
     ) -> Result<json::ScanTxOutResult> {
         self.call("scantxoutset", &["start".into(), into_json(descriptors)?]).await
     }
-
-    /// Returns information about the active ZeroMQ notifications
-    async fn get_zmq_notifications(&self) -> Result<Vec<json::GetZmqNotificationsResult>> {
-        self.call("getzmqnotifications", &[]).await
-    }
 }
 
 /// Client implements a JSON-RPC client for the Bitcoin Core daemon or compatible APIs.
@@ -1359,9 +1352,15 @@ impl RpcApi for Client {
         cmd: &str,
         args: &[serde_json::Value],
     ) -> Result<T> {
-        let raw = serde_json::value::to_raw_value(args)?;
-        let params = &[raw];
-        let req = self.client.build_request(&cmd, params);
+        let raw_args: Vec<_> = args
+            .iter()
+            .map(|a| {
+                let json_string = serde_json::to_string(a)?;
+                serde_json::value::RawValue::from_string(json_string) // we can't use to_raw_value here due to compat with Rust 1.29
+            })
+            .map(|a| a.map_err(|e| Error::Json(e)))
+            .collect::<Result<Vec<_>>>()?;
+        let req = self.client.build_request(&cmd, &raw_args);
         if log_enabled!(Debug) {
             debug!(target: "bitcoincore_rpc", "JSON-RPC request: {} {}", cmd, serde_json::Value::from(args));
         }
@@ -1386,8 +1385,11 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
                         debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {:?}", cmd, e);
                     }
                 } else if log_enabled!(Trace) {
-                    let def =
-                        serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
+                    // we can't use to_raw_value here due to compat with Rust 1.29
+                    let def = serde_json::value::RawValue::from_string(
+                        serde_json::Value::Null.to_string(),
+                    )
+                    .unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
                     trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
                 }

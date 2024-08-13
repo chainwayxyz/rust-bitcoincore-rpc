@@ -34,9 +34,7 @@ bitcoind -regtest $BLOCKFILTERARG $FALLBACKFEEARG \
     -rpcport=12349 \
     -server=1 \
     -txindex=1 \
-    -printtoconsole=0 \
-    -zmqpubrawblock=tcp://0.0.0.0:28332 \
-    -zmqpubrawtx=tcp://0.0.0.0:28333 &
+    -printtoconsole=0 &
 PID2=$!
 
 # Let it connect to the other node.

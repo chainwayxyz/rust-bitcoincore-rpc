@@ -22,7 +22,7 @@ pub enum Error {
     JsonRpc(jsonrpc_async::error::Error),
     Hex(hex::HexToBytesError),
     Json(serde_json::error::Error),
-    BitcoinSerialization(bitcoin::consensus::encode::FromHexError),
+    BitcoinSerialization(bitcoin::consensus::encode::Error),
     Secp256k1(secp256k1::Error),
     Io(io::Error),
     InvalidAmount(bitcoin::amount::ParseAmountError),
@@ -51,8 +51,8 @@ impl From<serde_json::error::Error> for Error {
     }
 }
 
-impl From<bitcoin::consensus::encode::FromHexError> for Error {
-    fn from(e: bitcoin::consensus::encode::FromHexError) -> Error {
+impl From<bitcoin::consensus::encode::Error> for Error {
+    fn from(e: bitcoin::consensus::encode::Error) -> Error {
         Error::BitcoinSerialization(e)
     }
 }

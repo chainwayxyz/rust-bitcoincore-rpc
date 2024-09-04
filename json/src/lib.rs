@@ -30,8 +30,8 @@ use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::sha256;
 use bitcoin::{
-    bip158, bip32, Address, Amount, Network, PrivateKey, PublicKey, Script,
-    ScriptBuf, SignedAmount, Transaction,
+    bip158, bip32, Address, Amount, Network, PrivateKey, PublicKey, Script, ScriptBuf,
+    SignedAmount, Transaction,
 };
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
@@ -908,7 +908,7 @@ impl SignRawTransactionResult {
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct TestMempoolAcceptResult {
     pub txid: bitcoin::Txid,
-    pub allowed: bool,
+    pub allowed: Option<bool>,
     #[serde(rename = "reject-reason")]
     pub reject_reason: Option<String>,
     /// Virtual transaction size as defined in BIP 141 (only present when 'allowed' is true)

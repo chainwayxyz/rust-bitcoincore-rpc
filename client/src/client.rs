@@ -18,9 +18,11 @@ use std::{fmt, result};
 use crate::{bitcoin, deserialize_hex};
 use async_trait::async_trait;
 use bitcoin::hex::DisplayHex;
-use jsonrpc_async;
+use reqwest::Client as ReqwestClient;
+use serde::de::DeserializeOwned;
 use serde::{self, Serialize};
-use serde_json::{self};
+use serde_json::{self, json, Value};
+use url::Url;
 
 use crate::bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use crate::bitcoin::hashes::hex::FromHex;
@@ -28,7 +30,7 @@ use crate::bitcoin::secp256k1::ecdsa::Signature;
 use crate::bitcoin::{
     Address, Amount, Block, OutPoint, PrivateKey, PublicKey, Script, Transaction,
 };
-use log::Level::{Debug, Trace, Warn};
+use log::Level;
 
 use crate::error::*;
 use crate::json;
@@ -1308,7 +1310,8 @@ pub trait RpcApi: Sized {
 
 /// Client implements a JSON-RPC client for the Bitcoin Core daemon or compatible APIs.
 pub struct Client {
-    client: jsonrpc_async::client::Client,
+    client: ReqwestClient,
+    url: String,
 }
 
 impl fmt::Debug for Client {
@@ -1322,77 +1325,76 @@ impl Client {
     ///
     /// Can only return [Err] when using cookie authentication.
     pub async fn new(url: &str, auth: Auth) -> Result<Self> {
-        let (user, pass) = auth.get_user_pass()?;
-        jsonrpc_async::client::Client::simple_http(url, user, pass)
-            .await
-            .map(|client| Client {
-                client,
-            })
-            .map_err(|e| super::error::Error::JsonRpc(e.into()))
-    }
+        let mut parsed_url = Url::parse(url)?;
 
-    /// Create a new Client using the given [jsonrpc_async::Client].
-    pub fn from_jsonrpc(client: jsonrpc_async::client::Client) -> Client {
-        Client {
-            client,
+        if let (Some(user), pass) = auth.get_user_pass()? {
+            parsed_url
+                .set_username(&user)
+                .map_err(|_| Error::Auth("Failed to set username".to_string()))?;
+            parsed_url
+                .set_password(pass.as_deref())
+                .map_err(|_| Error::Auth("Failed to set password".to_string()))?;
         }
+
+        Ok(Self {
+            client: ReqwestClient::new(),
+            url: parsed_url.to_string(),
+        })
     }
 
-    /// Get the underlying JSONRPC client.
-    pub fn get_jsonrpc_client(&self) -> &jsonrpc_async::client::Client {
-        &self.client
-    }
+    // /// Get the underlying JSONRPC client.
+    // pub fn get_jsonrpc_client(&self) -> &ReqwestClient {
+    //     &self.client
+    // }
 }
 
 #[async_trait]
 impl RpcApi for Client {
     /// Call an `cmd` rpc with given `args` list
-    async fn call<T: for<'a> serde::de::Deserialize<'a>>(
-        &self,
-        cmd: &str,
-        args: &[serde_json::Value],
-    ) -> Result<T> {
-        let raw_args: Vec<_> = args
-            .iter()
-            .map(|a| {
-                let json_string = serde_json::to_string(a)?;
-                serde_json::value::RawValue::from_string(json_string) // we can't use to_raw_value here due to compat with Rust 1.29
-            })
-            .map(|a| a.map_err(|e| Error::Json(e)))
-            .collect::<Result<Vec<_>>>()?;
-        let req = self.client.build_request(&cmd, &raw_args);
-        if log_enabled!(Debug) {
-            debug!(target: "bitcoincore_rpc", "JSON-RPC request: {} {}", cmd, serde_json::Value::from(args));
+    async fn call<T: DeserializeOwned>(&self, cmd: &str, args: &[Value]) -> Result<T> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": "rust-client",
+            "method": cmd,
+            "params": args,
+        });
+
+        if log_enabled!(Level::Debug) {
+            debug!(target: "bitcoincore_rpc", "JSON-RPC request: {} {}", cmd, json!(args));
         }
 
-        let resp = self.client.send_request(req).await.map_err(Error::from);
-        log_response(cmd, &resp);
-        Ok(resp?.result()?)
+        let req_builder = self.client.post(&self.url).json(&request);
+
+        let response = req_builder.send().await.unwrap();
+        let status = response.status();
+        let response_text = response.text().await.unwrap();
+
+        self.log_response(cmd, &status, &response_text);
+
+        if !status.is_success() {
+            return Err(Error::ReturnedError(format!("HTTP error {}: {}", status, response_text)));
+        }
+
+        let response: Value = serde_json::from_str(&response_text)?;
+        if let Some(error) = response.get("error") {
+            return Err(Error::ReturnedError(error.to_string()));
+        }
+
+        let result = response.get("result").ok_or_else(|| {
+            Error::ReturnedError("Missing 'result' field in response".to_string())
+        })?;
+
+        Ok(serde_json::from_value(result.clone())?)
     }
 }
 
-fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
-    if log_enabled!(Warn) || log_enabled!(Debug) || log_enabled!(Trace) {
-        match resp {
-            Err(ref e) => {
-                if log_enabled!(Debug) {
-                    debug!(target: "bitcoincore_rpc", "JSON-RPC failed parsing reply of {}: {:?}", cmd, e);
-                }
-            }
-            Ok(ref resp) => {
-                if let Some(ref e) = resp.error {
-                    if log_enabled!(Debug) {
-                        debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {:?}", cmd, e);
-                    }
-                } else if log_enabled!(Trace) {
-                    // we can't use to_raw_value here due to compat with Rust 1.29
-                    let def = serde_json::value::RawValue::from_string(
-                        serde_json::Value::Null.to_string(),
-                    )
-                    .unwrap();
-                    let result = resp.result.as_ref().unwrap_or(&def);
-                    trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
-                }
+impl Client {
+    fn log_response(&self, cmd: &str, status: &reqwest::StatusCode, response: &str) {
+        if log_enabled!(Level::Debug) {
+            if status.is_success() {
+                debug!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, response);
+            } else {
+                debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {} - {}", cmd, status, response);
             }
         }
     }

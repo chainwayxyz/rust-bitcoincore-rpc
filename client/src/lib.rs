@@ -22,20 +22,20 @@ extern crate log;
 #[macro_use] // `macro_use` is needed for v1.24.0 compilation.
 extern crate serde;
 
-pub extern crate jsonrpc_async;
-
 pub extern crate bitcoincore_rpc_json;
 pub use crate::json::bitcoin;
-use bitcoincore_rpc_json::bitcoin::hex::FromHex;
 pub use bitcoincore_rpc_json as json;
+use bitcoincore_rpc_json::bitcoin::hex::FromHex;
 use json::bitcoin::consensus::{Decodable, ReadExt};
 
 mod client;
 mod error;
+mod jsonrpc_error;
 mod queryable;
 
 pub use crate::client::*;
 pub use crate::error::Error;
+pub use crate::jsonrpc_error::Error as RpcError;
 pub use crate::queryable::*;
 
 fn deserialize_hex<T: Decodable>(hex: &str) -> Result<T> {

@@ -10,16 +10,15 @@
 
 use std::{error, fmt, io};
 
-use crate::bitcoin;
 use crate::bitcoin::hashes::hex;
 use crate::bitcoin::secp256k1;
-use jsonrpc_async;
+use crate::{bitcoin, jsonrpc_error};
 use serde_json;
 
 /// The error type for errors produced in this library.
 #[derive(Debug)]
 pub enum Error {
-    JsonRpc(jsonrpc_async::error::Error),
+    JsonRpc(jsonrpc_error::Error),
     Hex(hex::HexToBytesError),
     Json(serde_json::error::Error),
     BitcoinSerialization(bitcoin::consensus::encode::Error),
@@ -31,11 +30,19 @@ pub enum Error {
     UnexpectedStructure,
     /// The daemon returned an error string.
     ReturnedError(String),
+    Auth(String),
+    UrlParse(url::ParseError),
 }
 
-impl From<jsonrpc_async::error::Error> for Error {
-    fn from(e: jsonrpc_async::error::Error) -> Error {
+impl From<jsonrpc_error::Error> for Error {
+    fn from(e: jsonrpc_error::Error) -> Error {
         Error::JsonRpc(e)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Error {
+        Error::UrlParse(e)
     }
 }
 
@@ -88,6 +95,8 @@ impl fmt::Display for Error {
             Error::InvalidCookieFile => write!(f, "invalid cookie file"),
             Error::UnexpectedStructure => write!(f, "the JSON result had an unexpected structure"),
             Error::ReturnedError(ref s) => write!(f, "the daemon returned an error string: {}", s),
+            Error::Auth(ref s) => write!(f, "Auth error: {}", s),
+            Error::UrlParse(ref s) => write!(f, "Url error: {}", s),
         }
     }
 }

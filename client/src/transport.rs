@@ -20,7 +20,7 @@ impl ReqwestTransport {
         R: for<'a> serde::de::Deserialize<'a>,
     {
         let response = self.client.post(self.url.clone()).json(&req).send().await?;
-        Ok(response.json().await?)
+        response.json().await
     }
 }
 
@@ -30,7 +30,7 @@ impl Transport for ReqwestTransport {
         &self,
         r: jsonrpc_async::Request<'_>,
     ) -> Result<jsonrpc_async::Response, jsonrpc_async::Error> {
-        Ok(self.request(r).await.unwrap())
+        Ok(self.request(r).await.map_err(|e| jsonrpc_async::Error::Transport(e.into()))?)
     }
 
     async fn send_batch(

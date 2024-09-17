@@ -19,8 +19,7 @@ use std::str::FromStr;
 use bitcoin::absolute::LockTime;
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use bitcoincore_rpc::json;
-use bitcoincore_rpc::jsonrpc_async::error::Error as JsonRpcError;
-use bitcoincore_rpc::{Auth, Client, Error, RpcApi};
+use bitcoincore_rpc::{Auth, Client, Error, RpcApi, RpcError as JsonRpcError};
 
 use crate::json::BlockStatsFields as BsFields;
 use bitcoin::consensus::encode::{deserialize, serialize_hex};
@@ -839,12 +838,12 @@ async fn test_test_mempool_accept(cl: &Client) {
         .await
         .unwrap();
     let res = cl.test_mempool_accept(&[&tx]).await.unwrap();
-    assert!(!res[0].allowed);
+    assert!(!res[0].allowed.unwrap());
     assert!(res[0].reject_reason.is_some());
     let signed =
         cl.sign_raw_transaction_with_wallet(&tx, None, None).await.unwrap().transaction().unwrap();
     let res = cl.test_mempool_accept(&[&signed]).await.unwrap();
-    assert!(res[0].allowed, "not allowed: {:?}", res[0].reject_reason);
+    assert!(res[0].allowed.unwrap(), "not allowed: {:?}", res[0].reject_reason);
 }
 
 async fn test_wallet_create_funded_psbt(cl: &Client) {

@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -15,12 +16,13 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::{fmt, result};
 
+use crate::transport::ReqwestTransport;
 use crate::{bitcoin, deserialize_hex};
 use async_trait::async_trait;
 use bitcoin::hex::DisplayHex;
-use jsonrpc_async;
+use jsonrpc_async::Client as JsonRpcClient;
 use serde::{self, Serialize};
-use serde_json::{self};
+use url::Url;
 
 use crate::bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use crate::bitcoin::hashes::hex::FromHex;
@@ -28,7 +30,6 @@ use crate::bitcoin::secp256k1::ecdsa::Signature;
 use crate::bitcoin::{
     Address, Amount, Block, OutPoint, PrivateKey, PublicKey, Script, Transaction,
 };
-use log::Level::{Debug, Trace, Warn};
 
 use crate::error::*;
 use crate::json;
@@ -1308,7 +1309,7 @@ pub trait RpcApi: Sized {
 
 /// Client implements a JSON-RPC client for the Bitcoin Core daemon or compatible APIs.
 pub struct Client {
-    client: jsonrpc_async::client::Client,
+    client: JsonRpcClient,
 }
 
 impl fmt::Debug for Client {
@@ -1319,28 +1320,24 @@ impl fmt::Debug for Client {
 
 impl Client {
     /// Creates a client to a bitcoind JSON-RPC server.
-    ///
-    /// Can only return [Err] when using cookie authentication.
     pub async fn new(url: &str, auth: Auth) -> Result<Self> {
-        let (user, pass) = auth.get_user_pass()?;
-        jsonrpc_async::client::Client::simple_http(url, user, pass)
-            .await
-            .map(|client| Client {
-                client,
-            })
-            .map_err(|e| super::error::Error::JsonRpc(e.into()))
-    }
+        let mut parsed_url = Url::parse(url)?;
 
-    /// Create a new Client using the given [jsonrpc_async::Client].
-    pub fn from_jsonrpc(client: jsonrpc_async::client::Client) -> Client {
-        Client {
-            client,
+        if let (Some(user), pass) = auth.get_user_pass()? {
+            parsed_url
+                .set_username(&user)
+                .map_err(|_| Error::Auth("Failed to set username".to_string()))?;
+            parsed_url
+                .set_password(pass.as_deref())
+                .map_err(|_| Error::Auth("Failed to set password".to_string()))?;
         }
-    }
 
-    /// Get the underlying JSONRPC client.
-    pub fn get_jsonrpc_client(&self) -> &jsonrpc_async::client::Client {
-        &self.client
+        let transport = ReqwestTransport::new(parsed_url);
+        let client = JsonRpcClient::with_transport(transport);
+
+        Ok(Self {
+            client,
+        })
     }
 }
 
@@ -1385,11 +1382,8 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
                         debug!(target: "bitcoincore_rpc", "JSON-RPC error for {}: {:?}", cmd, e);
                     }
                 } else if log_enabled!(Trace) {
-                    // we can't use to_raw_value here due to compat with Rust 1.29
-                    let def = serde_json::value::RawValue::from_string(
-                        serde_json::Value::Null.to_string(),
-                    )
-                    .unwrap();
+                    let def =
+                        serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
                     trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
                 }

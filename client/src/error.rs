@@ -18,7 +18,7 @@ use serde_json;
 /// The error type for errors produced in this library.
 #[derive(Debug)]
 pub enum Error {
-    JsonRpc(jsonrpc_async::Error),
+    JsonRpc(jsonrpc_async::error::Error),
     Hex(hex::HexToBytesError),
     Json(serde_json::error::Error),
     BitcoinSerialization(bitcoin::consensus::encode::Error),
@@ -34,8 +34,8 @@ pub enum Error {
     UrlParse(url::ParseError),
 }
 
-impl From<jsonrpc_async::Error> for Error {
-    fn from(e: jsonrpc_async::Error) -> Error {
+impl From<jsonrpc_async::error::Error> for Error {
+    fn from(e: jsonrpc_async::error::Error) -> Error {
         Error::JsonRpc(e)
     }
 }

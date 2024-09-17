@@ -19,7 +19,7 @@ use std::str::FromStr;
 use bitcoin::absolute::LockTime;
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use bitcoincore_rpc::json;
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::{Auth, Client, Error, RpcApi, RpcError as JsonRpcError};
 
 use crate::json::BlockStatsFields as BsFields;
 use bitcoin::consensus::encode::{deserialize, serialize_hex};
@@ -61,36 +61,36 @@ impl log::Log for StdLogger {
 
 static LOGGER: StdLogger = StdLogger;
 
-// /// Assert that the call returns a "deprecated" error.
-// macro_rules! assert_deprecated {
-//     ($call:expr) => {
-//         match $call.await.unwrap_err() {
-//             Error::JsonRpc(JsonRpcError::Rpc(ref e)) if e.code == -32 => {}
-//             e => panic!("expected deprecated error for {}, got: {}", stringify!($call), e),
-//         }
-//     };
-// }
+/// Assert that the call returns a "deprecated" error.
+macro_rules! assert_deprecated {
+    ($call:expr) => {
+        match $call.await.unwrap_err() {
+            Error::JsonRpc(JsonRpcError::Rpc(ref e)) if e.code == -32 => {}
+            e => panic!("expected deprecated error for {}, got: {}", stringify!($call), e),
+        }
+    };
+}
 
-// /// Assert that the call returns a "method not found" error.
-// macro_rules! assert_not_found {
-//     ($call:expr) => {
-//         match $call.await.unwrap_err() {
-//             Error::JsonRpc(JsonRpcError::Rpc(ref e)) if e.code == -32601 => {}
-//             e => panic!("expected method not found error for {}, got: {}", stringify!($call), e),
-//         }
-//     };
-// }
+/// Assert that the call returns a "method not found" error.
+macro_rules! assert_not_found {
+    ($call:expr) => {
+        match $call.await.unwrap_err() {
+            Error::JsonRpc(JsonRpcError::Rpc(ref e)) if e.code == -32601 => {}
+            e => panic!("expected method not found error for {}, got: {}", stringify!($call), e),
+        }
+    };
+}
 
-// /// Assert that the call returns the specified error message.
-// macro_rules! assert_error_message {
-//     ($call:expr, $code:expr, $msg:expr) => {
-//         match $call.await.unwrap_err() {
-//             Error::JsonRpc(JsonRpcError::Rpc(ref e))
-//                 if e.code == $code && e.message.contains($msg) => {}
-//             e => panic!("expected '{}' error for {}, got: {}", $msg, stringify!($call), e),
-//         }
-//     };
-// }
+/// Assert that the call returns the specified error message.
+macro_rules! assert_error_message {
+    ($call:expr, $code:expr, $msg:expr) => {
+        match $call.await.unwrap_err() {
+            Error::JsonRpc(JsonRpcError::Rpc(ref e))
+                if e.code == $code && e.message.contains($msg) => {}
+            e => panic!("expected '{}' error for {}, got: {}", $msg, stringify!($call), e),
+        }
+    };
+}
 
 static mut VERSION: usize = 0;
 /// Get the version of the node that is running.
@@ -147,7 +147,7 @@ async fn main() {
     test_get_new_address(&cl).await;
     test_get_raw_change_address(&cl).await;
     test_dump_private_key(&cl).await;
-    // test_generate(&cl).await;
+    test_generate(&cl).await;
     test_get_balance_generate_to_address(&cl).await;
     test_get_balances_generate_to_address(&cl).await;
     test_get_best_block_hash(&cl).await;
@@ -222,7 +222,7 @@ async fn main() {
     test_add_node(&cl).await;
     test_get_added_node_info(&cl).await;
     test_get_node_addresses(&cl).await;
-    // test_disconnect_node(&cl).await;
+    test_disconnect_node(&cl).await;
     test_add_ban(&cl).await;
     test_set_network_active(&cl).await;
     test_get_index_info(&cl).await;
@@ -284,22 +284,22 @@ async fn test_dump_private_key(cl: &Client) {
     assert_eq!(addr, Address::p2wpkh(&pub_key, *NET));
 }
 
-// async fn test_generate(cl: &Client) {
-//     if version() < 180000 {
-//         let blocks = cl.generate(4, None).await.unwrap();
-//         assert_eq!(blocks.len(), 4);
-//         let blocks = cl.generate(6, Some(45)).await.unwrap();
-//         assert_eq!(blocks.len(), 6);
-//     } else if version() < 190000 {
-//         // assert_deprecated!(cl.generate(5, None));
-//     } else if version() < 210000 {
-//         // assert_not_found!(cl.generate(5, None));
-//     } else {
-//         // Bitcoin Core v0.21 appears to return this with a generic -1 error code,
-//         // rather than the expected -32601 code (RPC_METHOD_NOT_FOUND).
-//         // assert_error_message!(cl.generate(5, None), -1, "replaced by the -generate cli option");
-//     }
-// }
+async fn test_generate(cl: &Client) {
+    if version() < 180000 {
+        let blocks = cl.generate(4, None).await.unwrap();
+        assert_eq!(blocks.len(), 4);
+        let blocks = cl.generate(6, Some(45)).await.unwrap();
+        assert_eq!(blocks.len(), 6);
+    } else if version() < 190000 {
+        assert_deprecated!(cl.generate(5, None));
+    } else if version() < 210000 {
+        assert_not_found!(cl.generate(5, None));
+    } else {
+        // Bitcoin Core v0.21 appears to return this with a generic -1 error code,
+        // rather than the expected -32601 code (RPC_METHOD_NOT_FOUND).
+        assert_error_message!(cl.generate(5, None), -1, "replaced by the -generate cli option");
+    }
+}
 
 async fn test_get_balance_generate_to_address(cl: &Client) {
     let initial = cl.get_balance(None, None).await.unwrap();
@@ -627,7 +627,7 @@ async fn test_get_block_filter(cl: &Client) {
     if version() >= 190000 {
         let _ = cl.get_block_filter(&blocks[0]).await.unwrap();
     } else {
-        // assert_not_found!(cl.get_block_filter(&blocks[0]));
+        assert_not_found!(cl.get_block_filter(&blocks[0]));
     }
 }
 
@@ -1274,7 +1274,7 @@ async fn test_get_chain_tips(cl: &Client) {
 
 async fn test_add_node(cl: &Client) {
     cl.add_node("127.0.0.1:1234").await.unwrap();
-    // assert_error_message!(cl.add_node("127.0.0.1:1234"), -23, "Error: Node already added");
+    assert_error_message!(cl.add_node("127.0.0.1:1234"), -23, "Error: Node already added");
     cl.remove_node("127.0.0.1:1234").await.unwrap();
     cl.onetry_node("127.0.0.1:1234").await.unwrap();
 }
@@ -1293,14 +1293,14 @@ async fn test_get_node_addresses(cl: &Client) {
     cl.get_node_addresses(None).await.unwrap();
 }
 
-// async fn test_disconnect_node(cl: &Client) {
-//     assert_error_message!(
-//         cl.disconnect_node("127.0.0.1:1234"),
-//         -29,
-//         "Node not found in connected nodes"
-//     );
-//     assert_error_message!(cl.disconnect_node_by_id(1), -29, "Node not found in connected nodes");
-// }
+async fn test_disconnect_node(cl: &Client) {
+    assert_error_message!(
+        cl.disconnect_node("127.0.0.1:1234"),
+        -29,
+        "Node not found in connected nodes"
+    );
+    assert_error_message!(cl.disconnect_node_by_id(1), -29, "Node not found in connected nodes");
+}
 
 async fn test_add_ban(cl: &Client) {
     cl.add_ban("127.0.0.1", 0, false).await.unwrap();
@@ -1319,7 +1319,7 @@ async fn test_add_ban(cl: &Client) {
     let res = cl.list_banned().await.unwrap();
     assert_eq!(res.len(), 0);
 
-    // assert_error_message!(cl.add_ban("INVALID_STRING", 0, false), -30, "Error: Invalid IP/Subnet");
+    assert_error_message!(cl.add_ban("INVALID_STRING", 0, false), -30, "Error: Invalid IP/Subnet");
 }
 
 async fn test_set_network_active(cl: &Client) {

@@ -119,7 +119,8 @@ pub struct GetNetworkInfoResult {
     pub incremental_fee: Amount,
     #[serde(rename = "localaddresses")]
     pub local_addresses: Vec<GetNetworkInfoResultAddress>,
-    pub warnings: String,
+    /// Any network and blockchain warnings. In later versions of bitcoind, it's an array of strings.
+    pub warnings: StringOrStringArray,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
@@ -586,7 +587,8 @@ pub struct GetMiningInfoResult {
     pub pooled_tx: usize,
     #[serde(deserialize_with = "deserialize_bip70_network")]
     pub chain: Network,
-    pub warnings: String,
+    /// Any network and blockchain warnings. In later versions of bitcoind, it's an array of strings.
+    pub warnings: StringOrStringArray,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]

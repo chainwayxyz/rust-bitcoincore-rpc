@@ -282,6 +282,19 @@ pub trait RpcApi: Sized {
         self.call("bumpfee", handle_defaults(&mut args, &[null()])).await
     }
 
+    async fn psbt_bump_fee(
+        &self,
+        txid: &bitcoin::Txid,
+        options: Option<&json::BumpFeeOptions>,
+    ) -> Result<json::BumpFeeResult> {
+        let opts = match options {
+            Some(options) => Some(options.to_serializable(self.version().await?)),
+            None => None,
+        };
+        let mut args = [into_json(txid)?, opt_into_json(opts)?];
+        self.call("psbtbumpfee", handle_defaults(&mut args, &[null()])).await
+    }
+
     async fn load_wallet(&self, wallet: &str) -> Result<json::LoadWalletResult> {
         self.call("loadwallet", &[wallet.into()]).await
     }

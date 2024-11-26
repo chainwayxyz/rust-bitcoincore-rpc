@@ -20,8 +20,7 @@ impl ReqwestTransport {
         R: for<'a> serde::de::Deserialize<'a>,
     {
         match self.client.post(self.url.clone()).json(&req).send().await {
-            Ok(res) if res.status().is_success() => res.json().await,
-            Ok(res) => Err(res.error_for_status().unwrap_err()),
+            Ok(res) => res.json().await,
             Err(e) => Err(e),
         }
     }

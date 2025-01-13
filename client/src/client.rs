@@ -39,6 +39,32 @@ use crate::queryable;
 /// crate-specific Error type;
 pub type Result<T> = result::Result<T, Error>;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageSubmissionFees {
+    pub base: f64,
+    #[serde(rename = "effective-feerate", skip_serializing_if = "Option::is_none")]
+    pub effective_feerate: Option<f64>,
+    #[serde(rename = "effective-includes", skip_serializing_if = "Option::is_none")]
+    pub effective_includes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageTransactionResult {
+    pub txid: String,
+    #[serde(rename = "other-wtxid", skip_serializing_if = "Option::is_none")]
+    pub other_wtxid: Option<String>,
+    pub vsize: u32,
+    pub fees: PackageSubmissionFees,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageSubmissionResult {
+    #[serde(rename = "tx-results")]
+    pub tx_results: HashMap<String, PackageTransactionResult>,
+    #[serde(rename = "replaced-transactions", skip_serializing_if = "Option::is_none")]
+    pub replaced_transactions: Option<Vec<String>>,
+}
+
 /// Outpoint that serializes and deserializes as a map, instead of a string,
 /// for use as RPC arguments
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1138,6 +1164,15 @@ pub trait RpcApi: Sized {
 
     async fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<bitcoin::Txid> {
         self.call("sendrawtransaction", &[tx.raw_hex().into()]).await
+    }
+
+    /// Implement submitpackage here
+    async fn submit_package<R: RawTx>(&self, raw_txs: Vec<R>) -> Result<PackageSubmissionResult> {
+        // Convert the raw transactions to their hex representations
+        let hex_txs: Vec<String> = raw_txs.into_iter().map(|tx| tx.raw_hex().into()).collect();
+
+        // Make the RPC call with the array of hex-encoded transactions
+        self.call("submitpackage", &[hex_txs.into()]).await
     }
 
     async fn estimate_smart_fee(

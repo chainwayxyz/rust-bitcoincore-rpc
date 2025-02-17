@@ -942,6 +942,12 @@ pub trait RpcApi: Sized {
         self.call("testmempoolaccept", &[hexes.into()]).await
     }
 
+    async fn submit_package<R: RawTx + Send + Sync>(&self, rawtxs: &[R]) -> Result<PackageSubmissionResult> {
+        let hexes: Vec<serde_json::Value> =
+            rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
+        self.call("submitpackage", &[hexes.into()]).await
+    }
+
     async fn stop(&self) -> Result<String> {
         self.call("stop", &[]).await
     }
@@ -1164,15 +1170,6 @@ pub trait RpcApi: Sized {
 
     async fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<bitcoin::Txid> {
         self.call("sendrawtransaction", &[tx.raw_hex().into()]).await
-    }
-
-    /// Implement submitpackage here
-    async fn submit_package<R: RawTx>(&self, raw_txs: Vec<R>) -> Result<PackageSubmissionResult> {
-        // Convert the raw transactions to their hex representations
-        let hex_txs: Vec<String> = raw_txs.into_iter().map(|tx| tx.raw_hex().into()).collect();
-
-        // Make the RPC call with the array of hex-encoded transactions
-        self.call("submitpackage", &[hex_txs.into()]).await
     }
 
     async fn estimate_smart_fee(

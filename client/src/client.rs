@@ -49,14 +49,44 @@ pub struct PackageSubmissionFees {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PackageTransactionResult {
-    pub txid: String,
-    #[serde(rename = "other-wtxid", skip_serializing_if = "Option::is_none")]
-    pub other_wtxid: Option<String>,
-    pub vsize: u32,
-    pub fees: PackageSubmissionFees,
+#[serde(untagged)]
+pub enum PackageTransactionResult {
+    Success {
+        txid: String,
+        vsize: u32,
+        fees: PackageSubmissionFees,
+    },
+    SuccessAlreadyInMempool {
+        txid: String,
+        #[serde(rename = "other-wtxid")]
+        other_wtxid: Option<String>,
+    },
+    Failure {
+        txid: String,
+        error: String,
+    },
 }
-
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_package_transaction_result() {
+        let result = json!(
+            {
+                "txid": "123",
+                "error": "error"
+            }
+        );
+        let parsed: PackageTransactionResult = serde_json::from_value(result).unwrap();
+        assert_eq!(
+            parsed,
+            PackageTransactionResult::Failure {
+                txid: "123".to_string(),
+                error: "error".to_string()
+            }
+        );
+    }
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PackageSubmissionResult {
     #[serde(rename = "tx-results")]
@@ -942,7 +972,10 @@ pub trait RpcApi: Sized {
         self.call("testmempoolaccept", &[hexes.into()]).await
     }
 
-    async fn submit_package<R: RawTx + Send + Sync>(&self, rawtxs: &[R]) -> Result<PackageSubmissionResult> {
+    async fn submit_package<R: RawTx + Send + Sync>(
+        &self,
+        rawtxs: &[R],
+    ) -> Result<PackageSubmissionResult> {
         let hexes: Vec<serde_json::Value> =
             rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
         self.call("submitpackage", &[hexes.into()]).await
@@ -1422,7 +1455,15 @@ impl RpcApi for Client {
 
         let resp = self.client.send_request(req).await.map_err(Error::from);
         log_response(cmd, &resp);
-        Ok(resp?.result()?)
+
+        let failedmsg = format!(
+            "Failed to parse response {:?}",
+            resp.as_ref().ok().and_then(|a| a.result.as_ref())
+        );
+
+        Ok(resp?.result().inspect_err(|_| {
+            println!("{}", failedmsg);
+        })?)
     }
 }
 

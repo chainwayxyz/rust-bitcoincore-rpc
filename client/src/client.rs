@@ -1458,7 +1458,7 @@ impl RpcApi for Client {
 
         let failedmsg = format!(
             "Failed to parse response {:?}",
-            resp.as_ref().ok().and_then(|a| a.result.as_ref())
+            resp
         );
 
         Ok(resp?.result().inspect_err(|_| {

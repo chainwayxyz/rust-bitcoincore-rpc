@@ -56,14 +56,14 @@ pub enum PackageTransactionResult {
         vsize: u32,
         fees: PackageSubmissionFees,
     },
+    Failure {
+        txid: String,
+        error: String,
+    },
     SuccessAlreadyInMempool {
         txid: String,
         #[serde(rename = "other-wtxid")]
         other_wtxid: Option<String>,
-    },
-    Failure {
-        txid: String,
-        error: String,
     },
 }
 #[cfg(test)]

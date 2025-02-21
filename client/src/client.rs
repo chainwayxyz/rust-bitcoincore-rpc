@@ -1456,14 +1456,7 @@ impl RpcApi for Client {
         let resp = self.client.send_request(req).await.map_err(Error::from);
         log_response(cmd, &resp);
 
-        let failedmsg = format!(
-            "Failed to parse response {:?}",
-            resp
-        );
-
-        Ok(resp?.result().inspect_err(|_| {
-            println!("{}", failedmsg);
-        })?)
+        Ok(resp?.result()?)
     }
 }
 

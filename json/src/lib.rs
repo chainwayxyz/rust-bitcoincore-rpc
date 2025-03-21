@@ -936,7 +936,7 @@ impl SignRawTransactionResult {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TestMempoolAcceptResult {
     pub txid: bitcoin::Txid,
     pub wtxid: bitcoin::Wtxid,
@@ -955,7 +955,7 @@ pub struct TestMempoolAcceptResult {
     pub fees: Option<TestMempoolAcceptResultFees>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TestMempoolAcceptResultFees {
     /// Transaction fee in BTC
     #[serde(with = "bitcoin::amount::serde::as_btc")]

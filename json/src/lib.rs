@@ -961,7 +961,7 @@ pub struct TestMempoolAcceptResultFees {
     #[serde(with = "bitcoin::amount::serde::as_btc")]
     pub base: Amount,
     #[serde(rename = "effective-feerate")]
-    pub effective_feerate: Option<Amount>,
+    pub effective_feerate: Option<f64>,
 
     #[serde(rename = "effective-includes")]
     pub effective_includes: Option<Vec<String>>,

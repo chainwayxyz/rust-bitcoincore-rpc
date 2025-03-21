@@ -939,9 +939,14 @@ impl SignRawTransactionResult {
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct TestMempoolAcceptResult {
     pub txid: bitcoin::Txid,
+    pub wtxid: bitcoin::Wtxid,
     pub allowed: Option<bool>,
     #[serde(rename = "reject-reason")]
     pub reject_reason: Option<String>,
+    #[serde(rename = "reject-details")]
+    pub reject_details: Option<String>,
+    #[serde(rename = "package-error")]
+    pub package_error: Option<String>,
     /// Virtual transaction size as defined in BIP 141 (only present when 'allowed' is true)
     /// Added in Bitcoin Core v0.21
     pub vsize: Option<u64>,
@@ -955,7 +960,11 @@ pub struct TestMempoolAcceptResultFees {
     /// Transaction fee in BTC
     #[serde(with = "bitcoin::amount::serde::as_btc")]
     pub base: Amount,
-    // unlike GetMempoolEntryResultFees, this only has the `base` fee
+    #[serde(rename = "effective-feerate")]
+    pub effective_feerate: Option<Amount>,
+
+    #[serde(rename = "effective-includes")]
+    pub effective_includes: Option<Vec<String>>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]

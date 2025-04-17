@@ -1833,6 +1833,23 @@ pub struct WalletProcessPsbtResult {
     pub complete: bool,
 }
 
+// Models the outputs input for "walletcreatefundedpsbt"
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct WalletCreateFundedPsbtOutputs<'a> {
+    pub map: &'a HashMap<String, Amount>,
+    /// Optional data to be encoded as OP_RETURN output if included.
+    pub data: Option<&'a [u8]>,
+}
+
+impl<'a> From<&'a HashMap<String, Amount>> for WalletCreateFundedPsbtOutputs<'a> {
+    fn from(map: &'a HashMap<String, Amount>) -> Self {
+        Self {
+            map,
+            data: None,
+        }
+    }
+}
+
 /// Models the request for "walletcreatefundedpsbt"
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Default)]
 pub struct WalletCreateFundedPsbtOptions {

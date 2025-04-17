@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use bitcoincore_rpc_json::{WalletCreateFundedPsbtOptions, WalletCreateFundedPsbtOutputs};
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
@@ -1242,17 +1243,23 @@ pub trait RpcApi: Sized {
         self.call("waitforblock", &args).await
     }
 
-    async fn wallet_create_funded_psbt(
-        &self,
-        inputs: &[json::CreateRawTransactionInput],
-        outputs: &HashMap<String, Amount>,
+    async fn wallet_create_funded_psbt<'a, 'b>(
+        &'b self,
+        inputs: &'b [json::CreateRawTransactionInput],
+        outputs: impl Into<WalletCreateFundedPsbtOutputs<'a>> + Send,
         locktime: Option<i64>,
         options: Option<json::WalletCreateFundedPsbtOptions>,
         bip32derivs: Option<bool>,
     ) -> Result<json::WalletCreateFundedPsbtResult> {
-        let outputs_converted = serde_json::Map::from_iter(
-            outputs.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
+        let outputs = outputs.into();
+        let mut outputs_converted = serde_json::Map::from_iter(
+            outputs.map.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
         );
+
+        if let Some(data) = outputs.data {
+            outputs_converted.insert("data".to_string(), serde_json::Value::from(data.raw_hex()));
+        }
+
         let mut args = [
             into_json(inputs)?,
             into_json(outputs_converted)?,

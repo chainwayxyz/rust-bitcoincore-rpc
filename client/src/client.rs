@@ -1246,19 +1246,13 @@ pub trait RpcApi: Sized {
     async fn wallet_create_funded_psbt<'a, 'b>(
         &'b self,
         inputs: &'b [json::CreateRawTransactionInput],
-        outputs: impl Into<WalletCreateFundedPsbtOutputs<'a>> + Send,
+        outputs: impl Into<WalletCreateFundedPsbtOutputs> + Send,
         locktime: Option<i64>,
         options: Option<json::WalletCreateFundedPsbtOptions>,
         bip32derivs: Option<bool>,
     ) -> Result<json::WalletCreateFundedPsbtResult> {
         let outputs = outputs.into();
-        let mut outputs_converted = serde_json::Map::from_iter(
-            outputs.map.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
-        );
-
-        if let Some(data) = outputs.data {
-            outputs_converted.insert("data".to_string(), serde_json::Value::from(data.raw_hex()));
-        }
+        let outputs_converted = serde_json::to_value(&outputs).unwrap();
 
         let mut args = [
             into_json(inputs)?,

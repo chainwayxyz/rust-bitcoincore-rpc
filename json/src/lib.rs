@@ -1864,7 +1864,7 @@ impl Serialize for WalletCreateFundedPsbtOutput {
 }
 // Models the outputs input for "walletcreatefundedpsbt"
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-pub struct WalletCreateFundedPsbtOutputs(Vec<WalletCreateFundedPsbtOutput>);
+pub struct WalletCreateFundedPsbtOutputs(pub Vec<WalletCreateFundedPsbtOutput>);
 
 impl<'a> From<&'a HashMap<String, Amount>> for WalletCreateFundedPsbtOutputs {
     fn from(map: &'a HashMap<String, Amount>) -> Self {

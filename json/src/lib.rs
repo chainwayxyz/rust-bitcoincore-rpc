@@ -1851,7 +1851,7 @@ impl Serialize for WalletCreateFundedPsbtOutput {
         match self {
             WalletCreateFundedPsbtOutput::Spendable(addr, amount) => {
                 let mut map = serializer.serialize_map(Some(1))?;
-                map.serialize_entry(addr, amount)?;
+                map.serialize_entry(addr, &amount.to_btc())?;
                 map.end()
             }
             WalletCreateFundedPsbtOutput::OpReturn(data) => {

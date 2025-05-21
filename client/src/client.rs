@@ -976,10 +976,17 @@ pub trait RpcApi: Sized {
     async fn submit_package<R: RawTx + Send + Sync>(
         &self,
         rawtxs: &[R],
+        maxfeerate: Option<Amount>,
+        maxburnamount: Option<Amount>,
     ) -> Result<PackageSubmissionResult> {
         let hexes: Vec<serde_json::Value> =
             rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
-        self.call("submitpackage", &[hexes.into()]).await
+        let mut args = [
+            hexes.into(),
+            opt_into_json(maxfeerate.map(Amount::to_btc))?,
+            opt_into_json(maxburnamount.map(Amount::to_btc))?,
+        ];
+        self.call("submitpackage", handle_defaults(&mut args, &[0.10.into(), 0.00.into()])).await
     }
 
     async fn stop(&self) -> Result<String> {

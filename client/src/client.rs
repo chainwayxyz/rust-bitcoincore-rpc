@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use bitcoincore_rpc_json::{WalletCreateFundedPsbtOptions, WalletCreateFundedPsbtOutputs};
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
@@ -38,6 +39,62 @@ use crate::queryable;
 /// Crate-specific Result type, shorthand for `std::result::Result` with our
 /// crate-specific Error type;
 pub type Result<T> = result::Result<T, Error>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageSubmissionFees {
+    pub base: f64,
+    #[serde(rename = "effective-feerate", skip_serializing_if = "Option::is_none")]
+    pub effective_feerate: Option<f64>,
+    #[serde(rename = "effective-includes", skip_serializing_if = "Option::is_none")]
+    pub effective_includes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PackageTransactionResult {
+    Success {
+        txid: String,
+        vsize: u32,
+        fees: PackageSubmissionFees,
+    },
+    Failure {
+        txid: String,
+        error: String,
+    },
+    SuccessAlreadyInMempool {
+        txid: String,
+        #[serde(rename = "other-wtxid")]
+        other_wtxid: Option<String>,
+    },
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_package_transaction_result() {
+        let result = json!(
+            {
+                "txid": "123",
+                "error": "error"
+            }
+        );
+        let parsed: PackageTransactionResult = serde_json::from_value(result).unwrap();
+        assert_eq!(
+            parsed,
+            PackageTransactionResult::Failure {
+                txid: "123".to_string(),
+                error: "error".to_string()
+            }
+        );
+    }
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageSubmissionResult {
+    #[serde(rename = "tx-results")]
+    pub tx_results: HashMap<String, PackageTransactionResult>,
+    #[serde(rename = "replaced-transactions", skip_serializing_if = "Option::is_none")]
+    pub replaced_transactions: Option<Vec<String>>,
+}
 
 /// Outpoint that serializes and deserializes as a map, instead of a string,
 /// for use as RPC arguments
@@ -916,6 +973,22 @@ pub trait RpcApi: Sized {
         self.call("testmempoolaccept", &[hexes.into()]).await
     }
 
+    async fn submit_package<R: RawTx + Send + Sync>(
+        &self,
+        rawtxs: &[R],
+        maxfeerate: Option<Amount>,
+        maxburnamount: Option<Amount>,
+    ) -> Result<PackageSubmissionResult> {
+        let hexes: Vec<serde_json::Value> =
+            rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
+        let mut args = [
+            hexes.into(),
+            opt_into_json(maxfeerate.map(Amount::to_btc))?,
+            opt_into_json(maxburnamount.map(Amount::to_btc))?,
+        ];
+        self.call("submitpackage", handle_defaults(&mut args, &[0.10.into(), 0.00.into()])).await
+    }
+
     async fn stop(&self) -> Result<String> {
         self.call("stop", &[]).await
     }
@@ -1177,17 +1250,17 @@ pub trait RpcApi: Sized {
         self.call("waitforblock", &args).await
     }
 
-    async fn wallet_create_funded_psbt(
-        &self,
-        inputs: &[json::CreateRawTransactionInput],
-        outputs: &HashMap<String, Amount>,
+    async fn wallet_create_funded_psbt<'a, 'b>(
+        &'b self,
+        inputs: &'b [json::CreateRawTransactionInput],
+        outputs: impl Into<WalletCreateFundedPsbtOutputs> + Send,
         locktime: Option<i64>,
         options: Option<json::WalletCreateFundedPsbtOptions>,
         bip32derivs: Option<bool>,
     ) -> Result<json::WalletCreateFundedPsbtResult> {
-        let outputs_converted = serde_json::Map::from_iter(
-            outputs.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
-        );
+        let outputs = outputs.into();
+        let outputs_converted = serde_json::to_value(&outputs).unwrap();
+
         let mut args = [
             into_json(inputs)?,
             into_json(outputs_converted)?,
@@ -1390,6 +1463,7 @@ impl RpcApi for Client {
 
         let resp = self.client.send_request(req).await.map_err(Error::from);
         log_response(cmd, &resp);
+
         Ok(resp?.result()?)
     }
 }

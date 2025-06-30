@@ -29,11 +29,13 @@ use bitcoin::block::Version;
 use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::sha256;
+use bitcoin::hex::DisplayHex;
 use bitcoin::{
     bip158, bip32, Address, Amount, Network, PrivateKey, PublicKey, Script, ScriptBuf,
     SignedAmount, Transaction,
 };
 use serde::de::Error as SerdeError;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 //TODO(stevenroose) consider using a Time type
@@ -1840,6 +1842,49 @@ pub struct WalletCreateFundedPsbtResult {
 pub struct WalletProcessPsbtResult {
     pub psbt: String,
     pub complete: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum WalletCreateFundedPsbtOutput {
+    /// Spendable output with encoded address
+    Spendable(String, Amount),
+    /// Data for the op return output
+    OpReturn(Vec<u8>),
+}
+
+impl Serialize for WalletCreateFundedPsbtOutput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            WalletCreateFundedPsbtOutput::Spendable(addr, amount) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry(addr, &amount.to_btc())?;
+                map.end()
+            }
+            WalletCreateFundedPsbtOutput::OpReturn(data) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("data", &data.to_hex_string(Default::default()))?;
+                map.end()
+            }
+        }
+    }
+}
+// Models the outputs input for "walletcreatefundedpsbt"
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct WalletCreateFundedPsbtOutputs(pub Vec<WalletCreateFundedPsbtOutput>);
+
+impl<'a> From<&'a HashMap<String, Amount>> for WalletCreateFundedPsbtOutputs {
+    fn from(map: &'a HashMap<String, Amount>) -> Self {
+        Self(
+            map.iter()
+                .map(|(addr, amount)| {
+                    WalletCreateFundedPsbtOutput::Spendable(addr.to_string(), *amount)
+                })
+                .collect(),
+        )
+    }
 }
 
 /// Models the request for "walletcreatefundedpsbt"

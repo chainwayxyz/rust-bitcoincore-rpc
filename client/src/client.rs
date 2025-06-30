@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use bitcoincore_rpc_json::bitcoin::Txid;
 use bitcoincore_rpc_json::{WalletCreateFundedPsbtOptions, WalletCreateFundedPsbtOutputs};
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
@@ -53,16 +54,16 @@ pub struct PackageSubmissionFees {
 #[serde(untagged)]
 pub enum PackageTransactionResult {
     Success {
-        txid: String,
+        txid: Txid,
         vsize: u32,
         fees: PackageSubmissionFees,
     },
     Failure {
-        txid: String,
+        txid: Txid,
         error: String,
     },
     SuccessAlreadyInMempool {
-        txid: String,
+        txid: Txid,
         #[serde(rename = "other-wtxid")]
         other_wtxid: Option<String>,
     },

@@ -1371,7 +1371,7 @@ impl Client {
     pub async fn with_timeouts(
         url: &str,
         auth: Auth,
-        timeout: Duration,
+        timeout: Option<Duration>,
         connect_timeout: Option<Duration>,
     ) -> Result<Self> {
         let mut parsed_url = Url::parse(url)?;

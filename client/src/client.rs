@@ -1366,6 +1366,32 @@ impl Client {
             client,
         })
     }
+
+    /// Creates a client to a bitcoind JSON-RPC server with custom timeout configuration.
+    pub async fn with_timeouts(
+        url: &str,
+        auth: Auth,
+        timeout: Option<Duration>,
+        connect_timeout: Option<Duration>,
+    ) -> Result<Self> {
+        let mut parsed_url = Url::parse(url)?;
+
+        if let (Some(user), pass) = auth.get_user_pass()? {
+            parsed_url
+                .set_username(&user)
+                .map_err(|_| Error::Auth("Failed to set username".to_string()))?;
+            parsed_url
+                .set_password(pass.as_deref())
+                .map_err(|_| Error::Auth("Failed to set password".to_string()))?;
+        }
+
+        let transport = ReqwestTransport::with_timeouts(parsed_url, timeout, connect_timeout);
+        let client = JsonRpcClient::with_transport(transport);
+
+        Ok(Self {
+            client,
+        })
+    }
 }
 
 #[async_trait]

@@ -134,13 +134,14 @@ async fn new_wallet_client(wallet_name: &str) -> Client {
 async fn main() {
     log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::max())).unwrap();
 
-    let cl = new_wallet_client("testwallet").await;
+    let randomized_test_wallet_name = format!("testwallet{}", secp256k1::rand::random::<u32>());
+    let cl = new_wallet_client(&randomized_test_wallet_name).await;
 
     test_get_network_info(&cl).await;
     unsafe { VERSION = cl.version().await.unwrap() };
     println!("Version: {}", version());
 
-    cl.create_wallet("testwallet", None, None, None, None).await.unwrap();
+    cl.create_wallet(&randomized_test_wallet_name, None, None, None, None).await.unwrap();
 
     test_get_mining_info(&cl).await;
     test_get_blockchain_info(&cl).await;

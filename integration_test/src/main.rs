@@ -160,6 +160,8 @@ async fn main() {
     test_get_address_info(&cl).await;
     test_set_label(&cl).await;
     test_send_to_address(&cl).await;
+    test_send_to_address_with_avoid_reuse(&cl).await;
+    test_send_to_address_with_fee_rate(&cl).await;
     test_get_received_by_address(&cl).await;
     test_list_unspent(&cl).await;
     test_get_difficulty(&cl).await;
@@ -447,22 +449,189 @@ async fn test_set_label(cl: &Client) {
 async fn test_send_to_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
     let est = json::EstimateMode::Conservative;
-    let _ =
-        cl.send_to_address(&addr, btc(1), Some("cc"), None, None, None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, Some("tt"), None, None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, Some(true), None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, None, Some(true), None, None).await.unwrap();
-    let _ = cl.send_to_address(&addr, btc(1), None, None, None, None, Some(3), None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, None, None, None, Some(est)).await.unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), Some("cc"), None, None, None, None, None, None, None)
+        .await
+        .unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, Some("tt"), None, None, None, None, None, None)
+        .await
+        .unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, Some(true), None, None, None, None, None)
+        .await
+        .unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, Some(true), None, None, None, None)
+        .await
+        .unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, Some(3), None, None, None)
+        .await
+        .unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, Some(est), None, None)
+        .await
+        .unwrap();
+}
+
+async fn test_send_to_address_with_avoid_reuse(cl: &Client) {
+    // Test avoid_reuse parameter
+    // First, send to an address and then spend from it to create a "reused" address scenario
+    let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
+
+    // Send some coins to the address
+    let _ = cl
+        .send_to_address(&addr, btc(2), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
+
+    // Confirm the transaction
+    cl.generate_to_address(1, &cl.get_new_address(None, None).await.unwrap().assume_checked())
+        .await
+        .unwrap();
+
+    // Send from the same address (this marks it as "used")
+    let _ = cl
+        .send_to_address(&RANDOM_ADDRESS, btc(0.5), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
+
+    // Confirm this transaction too
+    cl.generate_to_address(1, &cl.get_new_address(None, None).await.unwrap().assume_checked())
+        .await
+        .unwrap();
+
+    // Now test sending with avoid_reuse=true - should work
+    let _ = cl
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(0.5),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Test sending with avoid_reuse=false - should also work
+    let _ = cl
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(0.5),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(false),
+            None,
+        )
+        .await
+        .unwrap();
+}
+
+async fn test_send_to_address_with_fee_rate(cl: &Client) {
+    // Test fee_rate parameter with different values
+    let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
+
+    // Test with low fee rate (1 sat/vbyte)
+    let txid_low = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(1))),
+        )
+        .await
+        .unwrap();
+
+    // Test with medium fee rate (10 sat/vbyte)
+    let txid_medium = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(10))),
+        )
+        .await
+        .unwrap();
+
+    // Test with high fee rate (100 sat/vbyte)
+    let txid_high = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(100))),
+        )
+        .await
+        .unwrap();
+
+    // Get transaction details to verify fees
+    let tx_low = cl.get_transaction(&txid_low, None).await.unwrap();
+    let tx_medium = cl.get_transaction(&txid_medium, None).await.unwrap();
+    let tx_high = cl.get_transaction(&txid_high, None).await.unwrap();
+
+    // Verify that higher fee rates result in higher absolute fees
+    // The fee is negative in the transaction details (it's what we paid)
+    assert!(
+        tx_low.fee.unwrap() > tx_medium.fee.unwrap(),
+        "Low fee should be less negative than medium fee"
+    );
+    assert!(
+        tx_medium.fee.unwrap() > tx_high.fee.unwrap(),
+        "Medium fee should be less negative than high fee"
+    );
+
+    // Test with fee_rate in kvbyte
+    let _ = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_kvbyte(Amount::from_sat(10000))),
+        )
+        .await
+        .unwrap();
 }
 
 async fn test_get_received_by_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let _ = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(cl.get_received_by_address(&addr, Some(0)).await.unwrap(), btc(1));
     assert_eq!(cl.get_received_by_address(&addr, Some(1)).await.unwrap(), btc(0));
     let _ = cl
@@ -477,7 +646,18 @@ async fn test_list_unspent(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap();
     let addr_checked = addr.clone().assume_checked();
     let txid = cl
-        .send_to_address(&addr.clone().assume_checked(), btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &addr.clone().assume_checked(),
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let unspent = cl.list_unspent(Some(0), None, Some(&[&addr_checked]), None, None).await.unwrap();
@@ -486,7 +666,7 @@ async fn test_list_unspent(cl: &Client) {
     assert_eq!(unspent[0].amount, btc(1));
 
     let txid = cl
-        .send_to_address(&addr_checked, btc(7), None, None, None, None, None, None)
+        .send_to_address(&addr_checked, btc(7), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let options = json::ListUnspentQueryOptions {
@@ -512,7 +692,10 @@ async fn test_get_connection_count(cl: &Client) {
 
 async fn test_get_raw_transaction(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
     let tx = cl.get_raw_transaction(&txid, None).await.unwrap();
     let hex = cl.get_raw_transaction_hex(&txid, None).await.unwrap();
     assert_eq!(tx, deserialize(&Vec::<u8>::from_hex(&hex).unwrap()).unwrap());
@@ -533,7 +716,9 @@ async fn test_get_raw_mempool(cl: &Client) {
 }
 
 async fn test_get_raw_mempool_verbose(cl: &Client) {
-    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None).await.unwrap();
+    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
     let _ = cl.get_raw_mempool_verbose().await.unwrap();
 
     // cleanup mempool transaction
@@ -542,7 +727,7 @@ async fn test_get_raw_mempool_verbose(cl: &Client) {
 
 async fn test_get_transaction(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let tx = cl.get_transaction(&txid, None).await.unwrap();
@@ -569,7 +754,7 @@ async fn test_list_since_block(cl: &Client) {
 
 async fn test_get_tx_out(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let out = cl.get_tx_out(&txid, 0, Some(false)).await.unwrap();
@@ -581,11 +766,11 @@ async fn test_get_tx_out(cl: &Client) {
 
 async fn test_get_tx_out_proof(cl: &Client) {
     let txid1 = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let txid2 = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let blocks = cl
@@ -598,7 +783,7 @@ async fn test_get_tx_out_proof(cl: &Client) {
 
 async fn test_get_mempool_entry(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
         .await
         .unwrap();
     let entry = cl.get_mempool_entry(&txid).await.unwrap();
@@ -610,7 +795,10 @@ async fn test_get_mempool_entry(cl: &Client) {
 
 async fn test_lock_unspent_unlock_unspent(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
 
     assert!(cl.lock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
     assert!(cl.unlock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
@@ -1059,7 +1247,10 @@ async fn test_finalize_psbt(cl: &Client) {
 
 async fn test_list_received_by_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
 
     let _ = cl.list_received_by_address(Some(&addr), None, None, None).await.unwrap();
     let _ = cl.list_received_by_address(Some(&addr), None, Some(true), None).await.unwrap();
@@ -1361,7 +1552,9 @@ async fn test_getblocktemplate(cl: &Client) {
     // contains an entry in the vector of GetBlockTemplateResultTransaction.
     // Otherwise the GetBlockTemplateResultTransaction deserialization wouldn't
     // be tested.
-    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None).await.unwrap();
+    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
 
     cl.get_block_template(GetBlockTemplateModes::Template, &[GetBlockTemplateRules::SegWit], &[])
         .await

@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use bitcoincore_rpc_json::FeeRate;
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
@@ -1021,6 +1022,8 @@ pub trait RpcApi: Sized {
         replaceable: Option<bool>,
         confirmation_target: Option<u32>,
         estimate_mode: Option<json::EstimateMode>,
+        avoid_reuse: Option<bool>,
+        fee_rate: Option<FeeRate>,
     ) -> Result<bitcoin::Txid> {
         let mut args = [
             address.to_string().into(),
@@ -1031,6 +1034,8 @@ pub trait RpcApi: Sized {
             opt_into_json(replaceable)?,
             opt_into_json(confirmation_target)?,
             opt_into_json(estimate_mode)?,
+            opt_into_json(avoid_reuse)?,
+            opt_into_json(fee_rate)?,
         ];
         self.call(
             "sendtoaddress",

@@ -42,7 +42,7 @@ use std::fmt;
 /// versions. To avoid burdening the user with using the correct unit, this struct
 /// provides an umambiguous way to represent the fee rate, and the lib will perform
 /// the necessary conversions.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct FeeRate(Amount);
 
 impl FeeRate {

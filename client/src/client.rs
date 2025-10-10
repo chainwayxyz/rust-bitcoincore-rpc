@@ -1041,7 +1041,7 @@ pub trait RpcApi: Sized {
             "sendtoaddress",
             handle_defaults(
                 &mut args,
-                &["".into(), "".into(), false.into(), false.into(), 6.into(), null()],
+                &["".into(), "".into(), false.into(), false.into(), 6.into(), null(), true.into(), null()],
             ),
         )
         .await

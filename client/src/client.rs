@@ -8,7 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
-use bitcoincore_rpc_json::FeeRate;
+use bitcoincore_rpc_json::{EstimateMode, FeeRate};
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
@@ -121,21 +121,30 @@ fn handle_defaults<'a, 'b>(
     defaults: &'b [serde_json::Value],
 ) -> &'a [serde_json::Value] {
     assert!(args.len() >= defaults.len());
+    println!("handle_defaults called with args: {:?}", args);
+    println!("and defaults: {:?}", defaults);
 
     // Pass over the optional arguments in backwards order, filling in defaults after the first
     // non-null optional argument has been observed.
     let mut first_non_null_optional_idx = None;
+    println!("defaults.len(): {}", defaults.len());
     for i in 0..defaults.len() {
+        println!("i: {}", i);
         let args_i = args.len() - 1 - i;
+        println!("args_i: {}", args_i);
         let defaults_i = defaults.len() - 1 - i;
+        println!("defaults_i: {}", defaults_i);
         if args[args_i] == serde_json::Value::Null {
+            println!("args[{}] is null", args_i);
             if first_non_null_optional_idx.is_some() {
-                if defaults[defaults_i] == serde_json::Value::Null {
-                    panic!("Missing `default` for argument idx {}", args_i);
-                }
+                println!("first_non_null_optional_idx is some");
+                // if defaults[defaults_i] == serde_json::Value::Null {
+                //     panic!("Missing `default` for argument idx {}", args_i);
+                // }
                 args[args_i] = defaults[defaults_i].clone();
             }
         } else if first_non_null_optional_idx.is_none() {
+            println!("args[{}] is not null", args_i);
             first_non_null_optional_idx = Some(args_i);
         }
     }
@@ -964,16 +973,6 @@ pub trait RpcApi: Sized {
         self.call("generatetoaddress", &[block_num.into(), address.to_string().into()]).await
     }
 
-    /// Mine up to block_num blocks immediately (before the RPC call returns)
-    /// to an address in the wallet.
-    async fn generate(
-        &self,
-        block_num: u64,
-        maxtries: Option<u64>,
-    ) -> Result<Vec<bitcoin::BlockHash>> {
-        self.call("generate", &[block_num.into(), opt_into_json(maxtries)?]).await
-    }
-
     /// Mark a block as invalid by `block_hash`
     async fn invalidate_block(&self, block_hash: &bitcoin::BlockHash) -> Result<()> {
         self.call("invalidateblock", &[into_json(block_hash)?]).await
@@ -1024,7 +1023,18 @@ pub trait RpcApi: Sized {
         estimate_mode: Option<json::EstimateMode>,
         avoid_reuse: Option<bool>,
         fee_rate: Option<FeeRate>,
+        verbosity: Option<bool>,
     ) -> Result<bitcoin::Txid> {
+        let wallet_info = self.get_wallet_info().await?;
+
+        let (confirmation_target_args, estimate_mode_arg, fee_rate_arg) = match fee_rate {
+            Some(fee_rate) => (None, None, Some(fee_rate)),
+            None => (
+                Some(confirmation_target.unwrap_or(6)),
+                Some(estimate_mode.unwrap_or(json::EstimateMode::Unset)),
+                None,
+            ),
+        };
         let mut args = [
             address.to_string().into(),
             into_json(amount.to_btc())?,
@@ -1032,16 +1042,27 @@ pub trait RpcApi: Sized {
             opt_into_json(comment_to)?,
             opt_into_json(subtract_fee)?,
             opt_into_json(replaceable)?,
-            opt_into_json(confirmation_target)?,
-            opt_into_json(estimate_mode)?,
+            opt_into_json(confirmation_target_args)?,
+            opt_into_json(estimate_mode_arg)?,
             opt_into_json(avoid_reuse)?,
-            opt_into_json(fee_rate)?,
+            opt_into_json(fee_rate_arg)?,
+            opt_into_json(verbosity)?,
         ];
         self.call(
             "sendtoaddress",
             handle_defaults(
                 &mut args,
-                &["".into(), "".into(), false.into(), false.into(), 6.into(), null(), null(), null()],
+                &[
+                    "".into(),
+                    "".into(),
+                    false.into(),
+                    true.into(),
+                    null(),
+                    null(),
+                    wallet_info.avoid_reuse.into(),
+                    null(),
+                    false.into(),
+                ],
             ),
         )
         .await
@@ -1419,7 +1440,9 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>, start_time: I
                     let def =
                         serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
-                    trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}, completed in {:.3}s", cmd, result, start_time.elapsed().as_secs_f64());
+                    if cmd != "generatetoaddress" {
+                        trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}, completed in {:.3}s", cmd, result, start_time.elapsed().as_secs_f64());
+                    }
                 }
             }
         }

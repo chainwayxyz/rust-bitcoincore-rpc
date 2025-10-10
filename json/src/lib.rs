@@ -206,7 +206,7 @@ pub struct GetWalletInfoResult {
     #[serde(rename = "hdseedid")]
     pub hd_seed_id: Option<bitcoin::bip32::XKeyIdentifier>,
     pub private_keys_enabled: bool,
-    pub avoid_reuse: Option<bool>,
+    pub avoid_reuse: bool,
     pub scanning: Option<ScanningDetails>,
 }
 

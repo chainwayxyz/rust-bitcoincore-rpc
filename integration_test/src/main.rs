@@ -560,19 +560,28 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
     let tx_high = cl.get_transaction(&txid_high, None).await.unwrap();
     println!("Transaction details with high fee rate: {:?}", tx_high);
 
-    // Verify that higher fee rates result in higher absolute fees
-    // The fee is negative in the transaction details (it's what we paid)
-    assert!(
-        tx_low.fee.unwrap() > tx_medium.fee.unwrap(),
-        "Low fee should be less negative than medium fee"
-    );
-    assert!(
-        tx_medium.fee.unwrap() > tx_high.fee.unwrap(),
-        "Medium fee should be less negative than high fee"
-    );
+    let tx_low_raw = cl.get_raw_transaction(&txid_low, None).await.unwrap();
+    let tx_medium_raw = cl.get_raw_transaction(&txid_medium, None).await.unwrap();
+    let tx_high_raw = cl.get_raw_transaction(&txid_high, None).await.unwrap();
+
+    let tx_low_vsize = tx_low_raw.vsize();
+    let tx_medium_vsize = tx_medium_raw.vsize();
+    let tx_high_vsize = tx_high_raw.vsize();
+
+    let fee_rate_low = -tx_low.fee.unwrap().to_sat() as f64 / tx_low_vsize as f64;
+    let fee_rate_medium = -tx_medium.fee.unwrap().to_sat() as f64 / tx_medium_vsize as f64;
+    let fee_rate_high = -tx_high.fee.unwrap().to_sat() as f64 / tx_high_vsize as f64;
+
+    println!("Fee rate with low setting: {:.2} sat/vbyte", fee_rate_low);
+    println!("Fee rate with medium setting: {:.2} sat/vbyte", fee_rate_medium);
+    println!("Fee rate with high setting: {:.2} sat/vbyte", fee_rate_high);
+
+    assert_eq!(fee_rate_low.floor(), 1.0);
+    assert_eq!(fee_rate_medium.floor(), 10.0);
+    assert_eq!(fee_rate_high.floor(), 100.0);
 
     // Test with fee_rate in kvbyte
-    let _ = cl
+    let txid_with_fee_rate_kvbyte = cl
         .send_to_address(
             &addr,
             btc(1),
@@ -587,8 +596,20 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
-    panic!("Successful send_to_address with fee_rate in kvbyte");
+        .unwrap()
+        .txid();
+
+    let tx_with_fee_rate_kvbyte =
+        cl.get_transaction(&txid_with_fee_rate_kvbyte, None).await.unwrap();
+    println!("Transaction details with fee_rate in kvbyte: {:?}", tx_with_fee_rate_kvbyte);
+    let tx_with_fee_rate_kvbyte_raw =
+        cl.get_raw_transaction(&txid_with_fee_rate_kvbyte, None).await.unwrap();
+    let tx_with_fee_rate_kvbyte_vsize = tx_with_fee_rate_kvbyte_raw.vsize();
+
+    let fee_rate_kvbyte = -tx_with_fee_rate_kvbyte.fee.unwrap().to_sat() as f64
+        / tx_with_fee_rate_kvbyte_vsize as f64;
+    println!("Fee rate with kvbyte setting: {:.2} sat/vbyte", fee_rate_kvbyte);
+    assert_eq!(fee_rate_kvbyte.floor(), 10.0);
 }
 
 async fn test_get_received_by_address(cl: &Client) {

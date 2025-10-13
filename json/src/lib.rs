@@ -206,12 +206,6 @@ impl SendToAddressResult {
     }
 }
 
-impl From<SendToAddressResult> for bitcoin::Txid {
-    fn from(result: SendToAddressResult) -> Self {
-        result.txid()
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct ListWalletDirResult {
     pub wallets: Vec<ListWalletDirItem>,

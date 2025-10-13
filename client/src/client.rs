@@ -1440,9 +1440,7 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>, start_time: I
                     let def =
                         serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
-                    if cmd != "generatetoaddress" {
-                        trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}, completed in {:.3}s", cmd, result, start_time.elapsed().as_secs_f64());
-                    }
+                    trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}, completed in {:.3}s", cmd, result, start_time.elapsed().as_secs_f64());
                 }
             }
         }

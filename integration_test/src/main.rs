@@ -13,6 +13,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use core::panic;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -462,7 +463,7 @@ async fn test_send_to_address(cl: &Client) {
         .await
         .unwrap();
     println!("Sixth successful send_to_address");
-    let _ = cl
+    let seventh_result = cl
         .send_to_address(
             &addr,
             btc(1),
@@ -477,13 +478,16 @@ async fn test_send_to_address(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
+    println!("Seventh result: {}", seventh_result);
     println!("Seventh successful send_to_address");
 
-    let _ = cl
+    let eighth_result = cl
         .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, Some(true))
-        .await
-        .unwrap();
+        .await;
+    println!("Eighth result: {:?}", eighth_result);
+    eighth_result.unwrap();
     println!("Eighth successful send_to_address");
 }
 
@@ -507,7 +511,8 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
 
     // Test with medium fee rate (10 sat/vbyte)
     let txid_medium = cl
@@ -525,7 +530,8 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
 
     // Test with high fee rate (100 sat/vbyte)
     let txid_high = cl
@@ -543,12 +549,16 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
 
     // Get transaction details to verify fees
     let tx_low = cl.get_transaction(&txid_low, None).await.unwrap();
+    println!("Transaction details with low fee rate: {:?}", tx_low);
     let tx_medium = cl.get_transaction(&txid_medium, None).await.unwrap();
+    println!("Transaction details with medium fee rate: {:?}", tx_medium);
     let tx_high = cl.get_transaction(&txid_high, None).await.unwrap();
+    println!("Transaction details with high fee rate: {:?}", tx_high);
 
     // Verify that higher fee rates result in higher absolute fees
     // The fee is negative in the transaction details (it's what we paid)
@@ -578,6 +588,7 @@ async fn test_send_to_address_with_fee_rate(cl: &Client) {
         )
         .await
         .unwrap();
+    panic!("Successful send_to_address with fee_rate in kvbyte");
 }
 
 async fn test_get_received_by_address(cl: &Client) {
@@ -614,7 +625,8 @@ async fn test_list_unspent(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let unspent = cl.list_unspent(Some(0), None, Some(&[&addr_checked]), None, None).await.unwrap();
     assert_eq!(unspent[0].txid, txid);
     assert_eq!(unspent[0].address.as_ref(), Some(&addr));
@@ -635,7 +647,8 @@ async fn test_list_unspent(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let options = json::ListUnspentQueryOptions {
         minimum_amount: Some(btc(7)),
         maximum_amount: Some(btc(7)),
@@ -662,7 +675,8 @@ async fn test_get_raw_transaction(cl: &Client) {
     let txid = cl
         .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let tx = cl.get_raw_transaction(&txid, None).await.unwrap();
     let hex = cl.get_raw_transaction_hex(&txid, None).await.unwrap();
     assert_eq!(tx, deserialize(&Vec::<u8>::from_hex(&hex).unwrap()).unwrap());
@@ -720,7 +734,8 @@ async fn test_get_transaction(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let tx = cl.get_transaction(&txid, None).await.unwrap();
     assert_eq!(tx.amount, sbtc(-1.0));
     assert_eq!(tx.info.txid, txid);
@@ -759,7 +774,8 @@ async fn test_get_tx_out(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let out = cl.get_tx_out(&txid, 0, Some(false)).await.unwrap();
     assert!(out.is_none());
     let out = cl.get_tx_out(&txid, 0, Some(true)).await.unwrap();
@@ -783,7 +799,8 @@ async fn test_get_tx_out_proof(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let txid2 = cl
         .send_to_address(
             &RANDOM_ADDRESS,
@@ -799,7 +816,8 @@ async fn test_get_tx_out_proof(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let blocks = cl
         .generate_to_address(7, &cl.get_new_address(None, None).await.unwrap().assume_checked())
         .await
@@ -824,7 +842,8 @@ async fn test_get_mempool_entry(cl: &Client) {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let entry = cl.get_mempool_entry(&txid).await.unwrap();
     assert!(entry.spent_by.is_empty());
 
@@ -837,7 +856,8 @@ async fn test_lock_unspent_unlock_unspent(cl: &Client) {
     let txid = cl
         .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
 
     assert!(cl.lock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
     assert!(cl.unlock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
@@ -1289,7 +1309,8 @@ async fn test_list_received_by_address(cl: &Client) {
     let txid = cl
         .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
 
     let _ = cl.list_received_by_address(Some(&addr), None, None, None).await.unwrap();
     let _ = cl.list_received_by_address(Some(&addr), None, Some(true), None).await.unwrap();

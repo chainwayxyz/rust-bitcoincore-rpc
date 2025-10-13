@@ -171,6 +171,48 @@ pub struct UnloadWalletResult {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum SendToAddressResult {
+    /// Simple txid string (when verbosity is false/None)
+    Simple(bitcoin::Txid),
+    /// Detailed object with txid and fee_reason (when verbosity is true)
+    Verbose {
+        txid: bitcoin::Txid,
+        fee_reason: String,
+    },
+}
+
+impl SendToAddressResult {
+    /// Get the transaction ID from either result variant
+    pub fn txid(&self) -> bitcoin::Txid {
+        match self {
+            SendToAddressResult::Simple(txid) => *txid,
+            SendToAddressResult::Verbose {
+                txid,
+                ..
+            } => *txid,
+        }
+    }
+
+    /// Get the fee reason if available (only present in verbose mode)
+    pub fn fee_reason(&self) -> Option<&str> {
+        match self {
+            SendToAddressResult::Simple(_) => None,
+            SendToAddressResult::Verbose {
+                fee_reason,
+                ..
+            } => Some(fee_reason),
+        }
+    }
+}
+
+impl From<SendToAddressResult> for bitcoin::Txid {
+    fn from(result: SendToAddressResult) -> Self {
+        result.txid()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct ListWalletDirResult {
     pub wallets: Vec<ListWalletDirItem>,
 }

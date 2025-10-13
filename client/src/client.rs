@@ -1024,7 +1024,7 @@ pub trait RpcApi: Sized {
         avoid_reuse: Option<bool>,
         fee_rate: Option<FeeRate>,
         verbosity: Option<bool>,
-    ) -> Result<bitcoin::Txid> {
+    ) -> Result<json::SendToAddressResult> {
         let wallet_info = self.get_wallet_info().await?;
 
         let (confirmation_target_args, estimate_mode_arg, fee_rate_arg) = match fee_rate {

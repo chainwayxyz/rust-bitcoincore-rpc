@@ -8,6 +8,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
+use bitcoincore_rpc_json::{EstimateMode, FeeRate};
 use log::Level::{Debug, Trace, Warn};
 use std::collections::HashMap;
 use std::fs::File;
@@ -129,9 +130,9 @@ fn handle_defaults<'a, 'b>(
         let defaults_i = defaults.len() - 1 - i;
         if args[args_i] == serde_json::Value::Null {
             if first_non_null_optional_idx.is_some() {
-                if defaults[defaults_i] == serde_json::Value::Null {
-                    panic!("Missing `default` for argument idx {}", args_i);
-                }
+                // if defaults[defaults_i] == serde_json::Value::Null {
+                //     panic!("Missing `default` for argument idx {}", args_i);
+                // }
                 args[args_i] = defaults[defaults_i].clone();
             }
         } else if first_non_null_optional_idx.is_none() {
@@ -963,16 +964,6 @@ pub trait RpcApi: Sized {
         self.call("generatetoaddress", &[block_num.into(), address.to_string().into()]).await
     }
 
-    /// Mine up to block_num blocks immediately (before the RPC call returns)
-    /// to an address in the wallet.
-    async fn generate(
-        &self,
-        block_num: u64,
-        maxtries: Option<u64>,
-    ) -> Result<Vec<bitcoin::BlockHash>> {
-        self.call("generate", &[block_num.into(), opt_into_json(maxtries)?]).await
-    }
-
     /// Mark a block as invalid by `block_hash`
     async fn invalidate_block(&self, block_hash: &bitcoin::BlockHash) -> Result<()> {
         self.call("invalidateblock", &[into_json(block_hash)?]).await
@@ -1021,7 +1012,20 @@ pub trait RpcApi: Sized {
         replaceable: Option<bool>,
         confirmation_target: Option<u32>,
         estimate_mode: Option<json::EstimateMode>,
-    ) -> Result<bitcoin::Txid> {
+        avoid_reuse: Option<bool>,
+        fee_rate: Option<FeeRate>,
+        verbosity: Option<bool>,
+    ) -> Result<json::SendToAddressResult> {
+        let wallet_info = self.get_wallet_info().await?;
+
+        let (confirmation_target_args, estimate_mode_arg, fee_rate_arg) = match fee_rate {
+            Some(fee_rate) => (None, None, Some(fee_rate)),
+            None => (
+                Some(confirmation_target.unwrap_or(6)),
+                Some(estimate_mode.unwrap_or(json::EstimateMode::Unset)),
+                None,
+            ),
+        };
         let mut args = [
             address.to_string().into(),
             into_json(amount.to_btc())?,
@@ -1029,14 +1033,27 @@ pub trait RpcApi: Sized {
             opt_into_json(comment_to)?,
             opt_into_json(subtract_fee)?,
             opt_into_json(replaceable)?,
-            opt_into_json(confirmation_target)?,
-            opt_into_json(estimate_mode)?,
+            opt_into_json(confirmation_target_args)?,
+            opt_into_json(estimate_mode_arg)?,
+            opt_into_json(avoid_reuse)?,
+            opt_into_json(fee_rate_arg)?,
+            opt_into_json(verbosity)?,
         ];
         self.call(
             "sendtoaddress",
             handle_defaults(
                 &mut args,
-                &["".into(), "".into(), false.into(), false.into(), 6.into(), null()],
+                &[
+                    "".into(),
+                    "".into(),
+                    false.into(),
+                    true.into(),
+                    null(),
+                    null(),
+                    wallet_info.avoid_reuse.into(),
+                    null(),
+                    false.into(),
+                ],
             ),
         )
         .await

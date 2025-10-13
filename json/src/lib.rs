@@ -40,9 +40,9 @@ use std::fmt;
 
 /// A representation of a fee rate. Bitcoin Core uses different units in different
 /// versions. To avoid burdening the user with using the correct unit, this struct
-/// provides an umambiguous way to represent the fee rate, and the lib will perform
+/// provides an unambiguous way to represent the fee rate, and the lib will perform
 /// the necessary conversions.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct FeeRate(Amount);
 
 impl FeeRate {
@@ -171,6 +171,42 @@ pub struct UnloadWalletResult {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum SendToAddressResult {
+    /// Simple txid string (when verbosity is false/None)
+    Simple(bitcoin::Txid),
+    /// Detailed object with txid and fee_reason (when verbosity is true)
+    Verbose {
+        txid: bitcoin::Txid,
+        fee_reason: String,
+    },
+}
+
+impl SendToAddressResult {
+    /// Get the transaction ID from either result variant
+    pub fn txid(&self) -> bitcoin::Txid {
+        match self {
+            SendToAddressResult::Simple(txid) => *txid,
+            SendToAddressResult::Verbose {
+                txid,
+                ..
+            } => *txid,
+        }
+    }
+
+    /// Get the fee reason if available (only present in verbose mode)
+    pub fn fee_reason(&self) -> Option<&str> {
+        match self {
+            SendToAddressResult::Simple(_) => None,
+            SendToAddressResult::Verbose {
+                fee_reason,
+                ..
+            } => Some(fee_reason),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct ListWalletDirResult {
     pub wallets: Vec<ListWalletDirItem>,
 }
@@ -206,7 +242,7 @@ pub struct GetWalletInfoResult {
     #[serde(rename = "hdseedid")]
     pub hd_seed_id: Option<bitcoin::bip32::XKeyIdentifier>,
     pub private_keys_enabled: bool,
-    pub avoid_reuse: Option<bool>,
+    pub avoid_reuse: bool,
     pub scanning: Option<ScanningDetails>,
 }
 

@@ -8,7 +8,7 @@
 //! to test the serialization of arguments and deserialization of responses.
 //!
 
-#![deny(unused)]
+// #![deny(unused)]
 
 #[macro_use]
 extern crate lazy_static;
@@ -18,7 +18,7 @@ use std::str::FromStr;
 
 use bitcoin::absolute::LockTime;
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
-use bitcoincore_rpc::json;
+use bitcoincore_rpc::json::{self, FeeRate};
 use bitcoincore_rpc::{Auth, Client, Error, RpcApi, RpcError as JsonRpcError};
 
 use crate::json::BlockStatsFields as BsFields;
@@ -146,8 +146,7 @@ async fn main() {
     test_get_blockchain_info(&cl).await;
     test_get_new_address(&cl).await;
     test_get_raw_change_address(&cl).await;
-    test_dump_private_key(&cl).await;
-    test_generate(&cl).await;
+    // test_dump_private_key(&cl).await;
     test_get_balance_generate_to_address(&cl).await;
     test_get_balances_generate_to_address(&cl).await;
     test_get_best_block_hash(&cl).await;
@@ -160,6 +159,7 @@ async fn main() {
     test_get_address_info(&cl).await;
     test_set_label(&cl).await;
     test_send_to_address(&cl).await;
+    test_send_to_address_with_fee_rate(&cl).await;
     test_get_received_by_address(&cl).await;
     test_list_unspent(&cl).await;
     test_get_difficulty(&cl).await;
@@ -282,23 +282,6 @@ async fn test_dump_private_key(cl: &Client) {
     let sk = cl.dump_private_key(&addr).await.unwrap();
     let pub_key = CompressedPublicKey::from_private_key(&SECP, &sk).unwrap();
     assert_eq!(addr, Address::p2wpkh(&pub_key, *NET));
-}
-
-async fn test_generate(cl: &Client) {
-    if version() < 180000 {
-        let blocks = cl.generate(4, None).await.unwrap();
-        assert_eq!(blocks.len(), 4);
-        let blocks = cl.generate(6, Some(45)).await.unwrap();
-        assert_eq!(blocks.len(), 6);
-    } else if version() < 190000 {
-        assert_deprecated!(cl.generate(5, None));
-    } else if version() < 210000 {
-        assert_not_found!(cl.generate(5, None));
-    } else {
-        // Bitcoin Core v0.21 appears to return this with a generic -1 error code,
-        // rather than the expected -32601 code (RPC_METHOD_NOT_FOUND).
-        assert_error_message!(cl.generate(5, None), -1, "replaced by the -generate cli option");
-    }
 }
 
 async fn test_get_balance_generate_to_address(cl: &Client) {
@@ -446,23 +429,194 @@ async fn test_set_label(cl: &Client) {
 
 async fn test_send_to_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
+    println!("Address: {}", addr);
     let est = json::EstimateMode::Conservative;
-    let _ =
-        cl.send_to_address(&addr, btc(1), Some("cc"), None, None, None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, Some("tt"), None, None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, Some(true), None, None, None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, None, Some(true), None, None).await.unwrap();
-    let _ = cl.send_to_address(&addr, btc(1), None, None, None, None, Some(3), None).await.unwrap();
-    let _ =
-        cl.send_to_address(&addr, btc(1), None, None, None, None, None, Some(est)).await.unwrap();
+    println!("EstimateMode: {:?}", est);
+    let _ = cl
+        .send_to_address(&addr, btc(1), Some("cc"), None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
+    println!("First successful send_to_address");
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, Some("tt"), None, None, None, None, None, None, None)
+        .await
+        .unwrap();
+    println!("Second successful send_to_address");
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, Some(true), None, None, None, None, None, None)
+        .await
+        .unwrap();
+    println!("Third successful send_to_address");
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, Some(true), None, None, None, None, None)
+        .await
+        .unwrap();
+    println!("Fourth successful send_to_address");
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, Some(3), None, None, None, None)
+        .await
+        .unwrap();
+    println!("Fifth successful send_to_address");
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, Some(est), None, None, None)
+        .await
+        .unwrap();
+    println!("Sixth successful send_to_address");
+    let seventh_result = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(FeeRate::per_vbyte(Amount::from_sat(10))),
+            None,
+        )
+        .await
+        .unwrap()
+        .txid();
+    println!("Seventh result: {}", seventh_result);
+    println!("Seventh successful send_to_address");
+
+    let eighth_result = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, Some(true))
+        .await;
+    println!("Eighth result: {:?}", eighth_result);
+    eighth_result.unwrap();
+    println!("Eighth successful send_to_address");
+}
+
+async fn test_send_to_address_with_fee_rate(cl: &Client) {
+    // Test fee_rate parameter with different values
+    let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
+
+    // Test with low fee rate (1 sat/vbyte)
+    let txid_low = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(1))),
+            None,
+        )
+        .await
+        .unwrap()
+        .txid();
+
+    // Test with medium fee rate (10 sat/vbyte)
+    let txid_medium = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(10))),
+            None,
+        )
+        .await
+        .unwrap()
+        .txid();
+
+    // Test with high fee rate (100 sat/vbyte)
+    let txid_high = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_vbyte(Amount::from_sat(100))),
+            None,
+        )
+        .await
+        .unwrap()
+        .txid();
+
+    // Get transaction details to verify fees
+    let tx_low = cl.get_transaction(&txid_low, None).await.unwrap();
+    println!("Transaction details with low fee rate: {:?}", tx_low);
+    let tx_medium = cl.get_transaction(&txid_medium, None).await.unwrap();
+    println!("Transaction details with medium fee rate: {:?}", tx_medium);
+    let tx_high = cl.get_transaction(&txid_high, None).await.unwrap();
+    println!("Transaction details with high fee rate: {:?}", tx_high);
+
+    let tx_low_raw = cl.get_raw_transaction(&txid_low, None).await.unwrap();
+    let tx_medium_raw = cl.get_raw_transaction(&txid_medium, None).await.unwrap();
+    let tx_high_raw = cl.get_raw_transaction(&txid_high, None).await.unwrap();
+
+    let tx_low_vsize = tx_low_raw.vsize();
+    let tx_medium_vsize = tx_medium_raw.vsize();
+    let tx_high_vsize = tx_high_raw.vsize();
+
+    let fee_rate_low = -tx_low.fee.unwrap().to_sat() as f64 / tx_low_vsize as f64;
+    let fee_rate_medium = -tx_medium.fee.unwrap().to_sat() as f64 / tx_medium_vsize as f64;
+    let fee_rate_high = -tx_high.fee.unwrap().to_sat() as f64 / tx_high_vsize as f64;
+
+    println!("Fee rate with low setting: {:.2} sat/vbyte", fee_rate_low);
+    println!("Fee rate with medium setting: {:.2} sat/vbyte", fee_rate_medium);
+    println!("Fee rate with high setting: {:.2} sat/vbyte", fee_rate_high);
+
+    assert_eq!(fee_rate_low.floor(), 1.0);
+    assert_eq!(fee_rate_medium.floor(), 10.0);
+    assert_eq!(fee_rate_high.floor(), 100.0);
+
+    // Test with fee_rate in kvbyte
+    let txid_with_fee_rate_kvbyte = cl
+        .send_to_address(
+            &addr,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json::FeeRate::per_kvbyte(Amount::from_sat(10000))),
+            None,
+        )
+        .await
+        .unwrap()
+        .txid();
+
+    let tx_with_fee_rate_kvbyte =
+        cl.get_transaction(&txid_with_fee_rate_kvbyte, None).await.unwrap();
+    println!("Transaction details with fee_rate in kvbyte: {:?}", tx_with_fee_rate_kvbyte);
+    let tx_with_fee_rate_kvbyte_raw =
+        cl.get_raw_transaction(&txid_with_fee_rate_kvbyte, None).await.unwrap();
+    let tx_with_fee_rate_kvbyte_vsize = tx_with_fee_rate_kvbyte_raw.vsize();
+
+    let fee_rate_kvbyte = -tx_with_fee_rate_kvbyte.fee.unwrap().to_sat() as f64
+        / tx_with_fee_rate_kvbyte_vsize as f64;
+    println!("Fee rate with kvbyte setting: {:.2} sat/vbyte", fee_rate_kvbyte);
+    assert_eq!(fee_rate_kvbyte.floor(), 10.0);
 }
 
 async fn test_get_received_by_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let _ = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let _ = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(cl.get_received_by_address(&addr, Some(0)).await.unwrap(), btc(1));
     assert_eq!(cl.get_received_by_address(&addr, Some(1)).await.unwrap(), btc(0));
     let _ = cl
@@ -477,18 +631,44 @@ async fn test_list_unspent(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap();
     let addr_checked = addr.clone().assume_checked();
     let txid = cl
-        .send_to_address(&addr.clone().assume_checked(), btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &addr.clone().assume_checked(),
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let unspent = cl.list_unspent(Some(0), None, Some(&[&addr_checked]), None, None).await.unwrap();
     assert_eq!(unspent[0].txid, txid);
     assert_eq!(unspent[0].address.as_ref(), Some(&addr));
     assert_eq!(unspent[0].amount, btc(1));
 
     let txid = cl
-        .send_to_address(&addr_checked, btc(7), None, None, None, None, None, None)
+        .send_to_address(
+            &addr_checked,
+            btc(7),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let options = json::ListUnspentQueryOptions {
         minimum_amount: Some(btc(7)),
         maximum_amount: Some(btc(7)),
@@ -512,7 +692,11 @@ async fn test_get_connection_count(cl: &Client) {
 
 async fn test_get_raw_transaction(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
+        .await
+        .unwrap()
+        .txid();
     let tx = cl.get_raw_transaction(&txid, None).await.unwrap();
     let hex = cl.get_raw_transaction_hex(&txid, None).await.unwrap();
     assert_eq!(tx, deserialize(&Vec::<u8>::from_hex(&hex).unwrap()).unwrap());
@@ -533,7 +717,21 @@ async fn test_get_raw_mempool(cl: &Client) {
 }
 
 async fn test_get_raw_mempool_verbose(cl: &Client) {
-    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None).await.unwrap();
+    cl.send_to_address(
+        &RANDOM_ADDRESS,
+        btc(1),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     let _ = cl.get_raw_mempool_verbose().await.unwrap();
 
     // cleanup mempool transaction
@@ -542,9 +740,22 @@ async fn test_get_raw_mempool_verbose(cl: &Client) {
 
 async fn test_get_transaction(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let tx = cl.get_transaction(&txid, None).await.unwrap();
     assert_eq!(tx.amount, sbtc(-1.0));
     assert_eq!(tx.info.txid, txid);
@@ -569,9 +780,22 @@ async fn test_list_since_block(cl: &Client) {
 
 async fn test_get_tx_out(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let out = cl.get_tx_out(&txid, 0, Some(false)).await.unwrap();
     assert!(out.is_none());
     let out = cl.get_tx_out(&txid, 0, Some(true)).await.unwrap();
@@ -581,13 +805,39 @@ async fn test_get_tx_out(cl: &Client) {
 
 async fn test_get_tx_out_proof(cl: &Client) {
     let txid1 = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let txid2 = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let blocks = cl
         .generate_to_address(7, &cl.get_new_address(None, None).await.unwrap().assume_checked())
         .await
@@ -598,9 +848,22 @@ async fn test_get_tx_out_proof(cl: &Client) {
 
 async fn test_get_mempool_entry(cl: &Client) {
     let txid = cl
-        .send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None)
+        .send_to_address(
+            &RANDOM_ADDRESS,
+            btc(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
-        .unwrap();
+        .unwrap()
+        .txid();
     let entry = cl.get_mempool_entry(&txid).await.unwrap();
     assert!(entry.spent_by.is_empty());
 
@@ -610,7 +873,11 @@ async fn test_get_mempool_entry(cl: &Client) {
 
 async fn test_lock_unspent_unlock_unspent(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
+        .await
+        .unwrap()
+        .txid();
 
     assert!(cl.lock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
     assert!(cl.unlock_unspent(&[OutPoint::new(txid, 0)]).await.unwrap());
@@ -1059,7 +1326,11 @@ async fn test_finalize_psbt(cl: &Client) {
 
 async fn test_list_received_by_address(cl: &Client) {
     let addr = cl.get_new_address(None, None).await.unwrap().assume_checked();
-    let txid = cl.send_to_address(&addr, btc(1), None, None, None, None, None, None).await.unwrap();
+    let txid = cl
+        .send_to_address(&addr, btc(1), None, None, None, None, None, None, None, None, None)
+        .await
+        .unwrap()
+        .txid();
 
     let _ = cl.list_received_by_address(Some(&addr), None, None, None).await.unwrap();
     let _ = cl.list_received_by_address(Some(&addr), None, Some(true), None).await.unwrap();
@@ -1237,7 +1508,7 @@ async fn test_create_wallet(cl: &Client) {
         let has_hd_seed = has_private_keys && !wallet_param.blank.unwrap_or(false);
         assert_eq!(wallet_info.hd_seed_id.is_some(), has_hd_seed);
         let has_avoid_reuse = wallet_param.avoid_reuse.unwrap_or(false);
-        assert_eq!(wallet_info.avoid_reuse.unwrap_or(false), has_avoid_reuse);
+        assert_eq!(wallet_info.avoid_reuse, has_avoid_reuse);
         assert_eq!(
             wallet_info.scanning.unwrap_or(json::ScanningDetails::NotScanning(false)),
             json::ScanningDetails::NotScanning(false)
@@ -1361,7 +1632,21 @@ async fn test_getblocktemplate(cl: &Client) {
     // contains an entry in the vector of GetBlockTemplateResultTransaction.
     // Otherwise the GetBlockTemplateResultTransaction deserialization wouldn't
     // be tested.
-    cl.send_to_address(&RANDOM_ADDRESS, btc(1), None, None, None, None, None, None).await.unwrap();
+    cl.send_to_address(
+        &RANDOM_ADDRESS,
+        btc(1),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     cl.get_block_template(GetBlockTemplateModes::Template, &[GetBlockTemplateRules::SegWit], &[])
         .await

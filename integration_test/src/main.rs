@@ -13,7 +13,6 @@
 #[macro_use]
 extern crate lazy_static;
 
-use core::panic;
 use std::collections::HashMap;
 use std::str::FromStr;
 

@@ -121,30 +121,21 @@ fn handle_defaults<'a, 'b>(
     defaults: &'b [serde_json::Value],
 ) -> &'a [serde_json::Value] {
     assert!(args.len() >= defaults.len());
-    println!("handle_defaults called with args: {:?}", args);
-    println!("and defaults: {:?}", defaults);
 
     // Pass over the optional arguments in backwards order, filling in defaults after the first
     // non-null optional argument has been observed.
     let mut first_non_null_optional_idx = None;
-    println!("defaults.len(): {}", defaults.len());
     for i in 0..defaults.len() {
-        println!("i: {}", i);
         let args_i = args.len() - 1 - i;
-        println!("args_i: {}", args_i);
         let defaults_i = defaults.len() - 1 - i;
-        println!("defaults_i: {}", defaults_i);
         if args[args_i] == serde_json::Value::Null {
-            println!("args[{}] is null", args_i);
             if first_non_null_optional_idx.is_some() {
-                println!("first_non_null_optional_idx is some");
                 // if defaults[defaults_i] == serde_json::Value::Null {
                 //     panic!("Missing `default` for argument idx {}", args_i);
                 // }
                 args[args_i] = defaults[defaults_i].clone();
             }
         } else if first_non_null_optional_idx.is_none() {
-            println!("args[{}] is not null", args_i);
             first_non_null_optional_idx = Some(args_i);
         }
     }

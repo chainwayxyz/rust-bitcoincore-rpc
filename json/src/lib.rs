@@ -44,30 +44,35 @@ use std::fmt;
 /// versions. To avoid burdening the user with using the correct unit, this struct
 /// provides an umambiguous way to represent the fee rate, and the lib will perform
 /// the necessary conversions.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub struct FeeRate(Amount);
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct FeeRate(bitcoin::FeeRate);
 
 impl FeeRate {
     /// Construct FeeRate from the amount per vbyte
     pub fn per_vbyte(amount_per_vbyte: Amount) -> Self {
         // internal representation is amount per vbyte
-        Self(amount_per_vbyte)
+        Self(bitcoin::FeeRate::from_sat_per_vb_unchecked(amount_per_vbyte.to_sat()))
     }
 
     /// Construct FeeRate from the amount per kilo-vbyte
     pub fn per_kvbyte(amount_per_kvbyte: Amount) -> Self {
-        // internal representation is amount per vbyte, so divide by 1000
-        Self::per_vbyte(amount_per_kvbyte / 1000)
+        // divide sat/kvb by 4 to get sat/kwu
+        Self(bitcoin::FeeRate::from_sat_per_kwu(amount_per_kvbyte.to_sat().div_ceil(4)))
+    }
+
+    /// Construct FeeRate from the amount per kilo-weight-unit
+    pub fn per_kwu(amount_per_kwu: Amount) -> Self {
+        Self(bitcoin::FeeRate::from_sat_per_kwu(amount_per_kwu.to_sat()))
     }
 
     pub fn to_sat_per_vbyte(&self) -> f64 {
-        // multiply by the number of decimals to get sat
-        self.0.to_sat() as f64
+        // multiply by 4 to get sat/vbyte, divide by 1000 to get sat/vbyte
+        self.0.to_sat_per_kwu() as f64 / 250.0
     }
 
     pub fn to_btc_per_kvbyte(&self) -> f64 {
         // divide by 10^8 to get btc/vbyte, then multiply by 10^3 to get btc/kbyte
-        self.0.to_sat() as f64 / 100_000.0
+        self.to_sat_per_vbyte() / 100_000.0
     }
 }
 /// A module used for serde serialization of bytes in hexadecimal format.

@@ -2019,6 +2019,8 @@ pub struct CreateRawTransactionInput {
     pub vout: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<u64>,
 }
 
 #[derive(Serialize, Clone, PartialEq, Eq, Debug, Default)]

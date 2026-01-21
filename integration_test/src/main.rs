@@ -731,6 +731,7 @@ async fn test_create_raw_transaction(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -757,6 +758,7 @@ async fn test_decode_raw_transaction(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -829,6 +831,7 @@ async fn test_test_mempool_accept(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: Some(0xFFFFFFFF),
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), unspent.amount - *FEE);
@@ -859,6 +862,7 @@ async fn test_wallet_create_funded_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -918,6 +922,7 @@ async fn test_wallet_process_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -941,6 +946,7 @@ async fn test_join_psbt(cl: &Client) {
         txid: unspent1.txid,
         vout: unspent1.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -954,6 +960,7 @@ async fn test_join_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output2 = HashMap::new();
     output2.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -977,6 +984,7 @@ async fn test_combine_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -1000,6 +1008,7 @@ async fn test_combine_raw_transaction(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -1025,6 +1034,7 @@ async fn test_create_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));
@@ -1043,6 +1053,7 @@ async fn test_finalize_psbt(cl: &Client) {
         txid: unspent.txid,
         vout: unspent.vout,
         sequence: None,
+        weight: None,
     };
     let mut output = HashMap::new();
     output.insert(RANDOM_ADDRESS.to_string(), btc(1));

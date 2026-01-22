@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::iter::FromIterator;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use std::{fmt, result};
 
 use crate::transport::ReqwestTransport;
@@ -1448,6 +1449,8 @@ impl RpcApi for Client {
         cmd: &str,
         args: &[serde_json::Value],
     ) -> Result<T> {
+        let start_time = Instant::now();
+
         let raw_args: Vec<_> = args
             .iter()
             .map(|a| {
@@ -1462,13 +1465,12 @@ impl RpcApi for Client {
         }
 
         let resp = self.client.send_request(req).await.map_err(Error::from);
-        log_response(cmd, &resp);
-
+        log_response(cmd, &resp, start_time);
         Ok(resp?.result()?)
     }
 }
 
-fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
+fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>, start_time: Instant) {
     if log_enabled!(Warn) || log_enabled!(Debug) || log_enabled!(Trace) {
         match resp {
             Err(ref e) => {
@@ -1485,7 +1487,7 @@ fn log_response(cmd: &str, resp: &Result<jsonrpc_async::Response>) {
                     let def =
                         serde_json::value::to_raw_value(&serde_json::value::Value::Null).unwrap();
                     let result = resp.result.as_ref().unwrap_or(&def);
-                    trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}", cmd, result);
+                    trace!(target: "bitcoincore_rpc", "JSON-RPC response for {}: {}, completed in {:.3}s", cmd, result, start_time.elapsed().as_secs_f64());
                 }
             }
         }

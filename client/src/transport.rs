@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use jsonrpc_async::Transport;
+use std::time::Duration;
 use url::Url;
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct ReqwestTransport {
     client: reqwest::Client,
@@ -9,8 +12,30 @@ pub struct ReqwestTransport {
 
 impl ReqwestTransport {
     pub fn new(url: Url) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(DEFAULT_TIMEOUT)
+            .build()
+            .expect("Failed to build reqwest client");
+
         Self {
-            client: reqwest::Client::new(),
+            client,
+            url,
+        }
+    }
+
+    pub fn with_timeouts(
+        url: Url,
+        timeout: Option<Duration>,
+        connect_timeout: Option<Duration>,
+    ) -> Self {
+        let builder = reqwest::Client::builder()
+            .timeout(timeout.unwrap_or(DEFAULT_TIMEOUT))
+            .connect_timeout(connect_timeout.unwrap_or(DEFAULT_TIMEOUT));
+
+        let client = builder.build().expect("Failed to build reqwest client");
+
+        Self {
+            client,
             url,
         }
     }

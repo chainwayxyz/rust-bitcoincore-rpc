@@ -786,6 +786,7 @@ async fn test_fund_raw_transaction(cl: &Client) {
 
     let options = json::FundRawTransactionOptions {
         add_inputs: None,
+        include_unsafe: None,
         change_address: Some(addr),
         change_position: Some(0),
         change_type: None,
@@ -803,6 +804,7 @@ async fn test_fund_raw_transaction(cl: &Client) {
 
     let options = json::FundRawTransactionOptions {
         add_inputs: None,
+        include_unsafe: None,
         change_address: None,
         change_position: Some(0),
         change_type: Some(json::AddressType::Legacy),
@@ -869,6 +871,7 @@ async fn test_wallet_create_funded_psbt(cl: &Client) {
 
     let options = json::WalletCreateFundedPsbtOptions {
         add_inputs: None,
+        include_unsafe: None,
         change_address: None,
         change_position: Some(1),
         change_type: Some(json::AddressType::Legacy),
@@ -893,6 +896,7 @@ async fn test_wallet_create_funded_psbt(cl: &Client) {
 
     let options = json::WalletCreateFundedPsbtOptions {
         add_inputs: None,
+        include_unsafe: None,
         change_address: Some(addr),
         change_position: Some(1),
         change_type: None,

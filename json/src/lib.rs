@@ -1899,6 +1899,8 @@ pub struct WalletCreateFundedPsbtOptions {
     /// Added in Bitcoin Core v0.21
     #[serde(skip_serializing_if = "Option::is_none")]
     pub add_inputs: Option<bool>,
+    #[serde(rename = "include_unsafe", skip_serializing_if = "Option::is_none")]
+    pub include_unsafe: Option<bool>,
     #[serde(rename = "changeAddress", skip_serializing_if = "Option::is_none")]
     pub change_address: Option<Address<NetworkUnchecked>>,
     #[serde(rename = "changePosition", skip_serializing_if = "Option::is_none")]
@@ -2044,6 +2046,8 @@ pub struct FundRawTransactionOptions {
     /// Added in Bitcoin Core v0.21
     #[serde(rename = "add_inputs", skip_serializing_if = "Option::is_none")]
     pub add_inputs: Option<bool>,
+    #[serde(rename = "include_unsafe", skip_serializing_if = "Option::is_none")]
+    pub include_unsafe: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change_address: Option<Address>,
     #[serde(skip_serializing_if = "Option::is_none")]

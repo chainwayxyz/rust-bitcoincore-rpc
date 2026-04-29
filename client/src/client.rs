@@ -706,6 +706,33 @@ pub trait RpcApi: Sized {
         Ok(FromHex::from_hex(&hex)?)
     }
 
+    /// Find transactions spending any of the given prevouts.
+    ///
+    /// Bitcoin Core v31 can use txospenderindex for confirmed spends when
+    /// `mempool_only` is false or left at Core's default.
+    async fn get_tx_spending_prevout(
+        &self,
+        outpoints: &[OutPoint],
+        options: Option<&json::GetTxSpendingPrevoutOptions>,
+    ) -> Result<Vec<json::GetTxSpendingPrevoutResult>> {
+        if outpoints.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let outputs: Vec<_> = outpoints.iter().map(|o| JsonOutPoint::from(*o)).collect();
+        let mut args = [into_json(outputs)?, opt_into_json(options)?];
+        self.call("gettxspendingprevout", handle_defaults(&mut args, &[null()])).await
+    }
+
+    /// Alias for [`RpcApi::get_tx_spending_prevout`] with plural spelling.
+    async fn get_tx_spending_prevouts(
+        &self,
+        outpoints: &[OutPoint],
+        options: Option<&json::GetTxSpendingPrevoutOptions>,
+    ) -> Result<Vec<json::GetTxSpendingPrevoutResult>> {
+        self.get_tx_spending_prevout(outpoints, options).await
+    }
+
     async fn import_public_key(
         &self,
         pubkey: &PublicKey,

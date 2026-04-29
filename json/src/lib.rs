@@ -1274,6 +1274,60 @@ pub struct GetMempoolEntryResultFees {
     pub descendant: Amount,
 }
 
+/// Options for the `gettxspendingprevout` RPC.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize)]
+pub struct GetTxSpendingPrevoutOptions {
+    /// If false and mempool lacks a relevant spend, use txospenderindex.
+    ///
+    /// Bitcoin Core v31 defaults this to true if txospenderindex is unavailable, otherwise false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mempool_only: Option<bool>,
+    /// Return the full spending transaction as hex in the `spendingtx` result field.
+    #[serde(rename = "return_spending_tx", skip_serializing_if = "Option::is_none")]
+    pub return_spending_tx: Option<bool>,
+}
+
+/// Result entry returned by the `gettxspendingprevout` RPC.
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+pub struct GetTxSpendingPrevoutResult {
+    /// The transaction id of the checked output.
+    pub txid: bitcoin::Txid,
+    /// The vout value of the checked output.
+    pub vout: u32,
+    /// The transaction id of the transaction spending this output, omitted if unspent.
+    #[serde(rename = "spendingtxid", default, skip_serializing_if = "Option::is_none")]
+    pub spending_txid: Option<bitcoin::Txid>,
+    /// The full spending transaction, if requested with `return_spending_tx`.
+    #[serde(
+        rename = "spendingtx",
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::serde_hex::opt"
+    )]
+    pub spending_tx: Option<Vec<u8>>,
+    /// The hash of the spending block, omitted if unspent or the spending tx is not confirmed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockhash: Option<bitcoin::BlockHash>,
+}
+
+impl GetTxSpendingPrevoutResult {
+    /// The checked outpoint.
+    pub fn outpoint(&self) -> bitcoin::OutPoint {
+        bitcoin::OutPoint {
+            txid: self.txid,
+            vout: self.vout,
+        }
+    }
+
+    /// Deserialize the full spending transaction, if it was requested and returned.
+    pub fn spending_transaction(&self) -> Result<Option<Transaction>, encode::Error> {
+        match self.spending_tx {
+            Some(ref tx) => Ok(Some(encode::deserialize(tx)?)),
+            None => Ok(None),
+        }
+    }
+}
+
 impl<'a> serde::Serialize for ImportMultiRequestScriptPubkey<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -2448,5 +2502,51 @@ mod tests {
         assert_eq!(bip9, SoftforkType::Bip9);
         let other: SoftforkType = serde_json::from_str("\"bip8\"").unwrap();
         assert_eq!(other, SoftforkType::Other);
+    }
+
+    #[test]
+    fn test_get_tx_spending_prevout_options() {
+        let empty = serde_json::to_value(GetTxSpendingPrevoutOptions::default()).unwrap();
+        assert_eq!(empty, serde_json::json!({}));
+
+        let options = GetTxSpendingPrevoutOptions {
+            mempool_only: Some(false),
+            return_spending_tx: Some(true),
+        };
+        assert_eq!(
+            serde_json::to_value(options).unwrap(),
+            serde_json::json!({
+                "mempool_only": false,
+                "return_spending_tx": true,
+            })
+        );
+    }
+
+    #[test]
+    fn test_get_tx_spending_prevout_result() {
+        let spending_tx_hex = "0200000001586bd02815cf5faabfec986a4e50d25dbee089bd2758621e61c5fab06c334af0000000006b483045022100e85425f6d7c589972ee061413bcf08dc8c8e589ce37b217535a42af924f0e4d602205c9ba9cb14ef15513c9d946fa1c4b797883e748e8c32171bdf6166583946e35c012103dae30a4d7870cd87b45dd53e6012f71318fdd059c1c2623b8cc73f8af287bb2dfeffffff021dc4260c010000001976a914f602e88b2b5901d8aab15ebe4a97cf92ec6e03b388ac00e1f505000000001976a914687ffeffe8cf4e4c038da46a9b1d37db385a472d88acfd211500";
+        let result: GetTxSpendingPrevoutResult = serde_json::from_value(serde_json::json!({
+            "txid": "1111111111111111111111111111111111111111111111111111111111111111",
+            "vout": 3,
+            "spendingtxid": "2222222222222222222222222222222222222222222222222222222222222222",
+            "spendingtx": spending_tx_hex,
+            "blockhash": "3333333333333333333333333333333333333333333333333333333333333333",
+        }))
+        .unwrap();
+
+        assert_eq!(result.vout, 3);
+        assert_eq!(result.outpoint().vout, 3);
+        assert!(result.spending_txid.is_some());
+        assert!(result.blockhash.is_some());
+
+        let tx = result.spending_transaction().unwrap().unwrap();
+        assert_eq!(encode::serialize_hex(&tx), spending_tx_hex);
+
+        let unspent: GetTxSpendingPrevoutResult = serde_json::from_value(serde_json::json!({
+            "txid": "1111111111111111111111111111111111111111111111111111111111111111",
+            "vout": 0,
+        }))
+        .unwrap();
+        assert!(unspent.spending_transaction().unwrap().is_none());
     }
 }

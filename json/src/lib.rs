@@ -191,12 +191,12 @@ pub struct GetWalletInfoResult {
     pub wallet_name: String,
     #[serde(rename = "walletversion")]
     pub wallet_version: u32,
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub balance: Amount,
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub unconfirmed_balance: Amount,
-    #[serde(with = "bitcoin::amount::serde::as_btc")]
-    pub immature_balance: Amount,
+    #[serde(default, with = "bitcoin::amount::serde::as_btc::opt")]
+    pub balance: Option<Amount>,
+    #[serde(default, with = "bitcoin::amount::serde::as_btc::opt")]
+    pub unconfirmed_balance: Option<Amount>,
+    #[serde(default, with = "bitcoin::amount::serde::as_btc::opt")]
+    pub immature_balance: Option<Amount>,
     #[serde(rename = "txcount")]
     pub tx_count: usize,
     #[serde(rename = "keypoololdest")]
@@ -204,10 +204,11 @@ pub struct GetWalletInfoResult {
     #[serde(rename = "keypoolsize")]
     pub keypool_size: usize,
     #[serde(rename = "keypoolsize_hd_internal")]
-    pub keypool_size_hd_internal: usize,
+    pub keypool_size_hd_internal: Option<usize>,
     pub unlocked_until: Option<u64>,
-    #[serde(rename = "paytxfee", with = "bitcoin::amount::serde::as_btc")]
-    pub pay_tx_fee: Amount,
+    /// Removed from `getwalletinfo` in Bitcoin Core v31.0.
+    #[serde(rename = "paytxfee", default, with = "bitcoin::amount::serde::as_btc::opt")]
+    pub pay_tx_fee: Option<Amount>,
     #[serde(rename = "hdseedid")]
     pub hd_seed_id: Option<bitcoin::bip32::XKeyIdentifier>,
     pub private_keys_enabled: bool,
@@ -1514,7 +1515,7 @@ pub struct GetPeerInfoResult {
     pub addr: String,
     /// Bind address of the connection to the peer
     // TODO: use a type for addrbind
-    pub addrbind: String,
+    pub addrbind: Option<String>,
     /// Local address as reported by the peer
     // TODO: use a type for addrlocal
     pub addrlocal: Option<String>,
@@ -1561,7 +1562,9 @@ pub struct GetPeerInfoResult {
     /// Deprecated in Bitcoin Core v0.21
     pub addnode: Option<bool>,
     /// The starting height (block) of the peer
-    pub startingheight: i64,
+    /// Deprecated in Bitcoin Core v31.0 and only returned with
+    /// `-deprecatedrpc=startingheight`.
+    pub startingheight: Option<i64>,
     /// The ban score
     /// Deprecated in Bitcoin Core v0.21
     pub banscore: Option<i64>,
@@ -1608,6 +1611,7 @@ pub enum GetPeerInfoResultConnectionType {
     Manual,
     AddrFetch,
     Feeler,
+    PrivateBroadcast,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]

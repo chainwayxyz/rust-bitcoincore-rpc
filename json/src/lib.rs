@@ -1244,6 +1244,10 @@ pub struct GetMempoolEntryResult {
     pub ancestor_size: u64,
     /// Hash of serialized transaction, including witness data
     pub wtxid: bitcoin::Txid,
+    /// Sigops-adjusted weight of the cluster chunk this transaction is mined in.
+    /// Added in Bitcoin Core v31.0
+    #[serde(rename = "chunkweight")]
+    pub chunk_weight: Option<u64>,
     /// Fee information
     pub fees: GetMempoolEntryResultFees,
     /// Unconfirmed transactions used as inputs for this transaction
@@ -1273,6 +1277,10 @@ pub struct GetMempoolEntryResultFees {
     /// Modified fees (see above) of in-mempool descendants (including this one) in BTC
     #[serde(with = "bitcoin::amount::serde::as_btc")]
     pub descendant: Amount,
+    /// Modified fees (see above) of the cluster chunk this transaction is mined in, in BTC.
+    /// Added in Bitcoin Core v31.0
+    #[serde(default, with = "bitcoin::amount::serde::as_btc::opt")]
+    pub chunk: Option<Amount>,
 }
 
 /// Options for the `gettxspendingprevout` RPC.

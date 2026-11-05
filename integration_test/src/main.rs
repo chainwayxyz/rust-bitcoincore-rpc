@@ -1553,9 +1553,14 @@ async fn test_get_mempool_info(cl: &Client) {
 
     if version() >= 240000 {
         assert!(res.incremental_relay_fee.is_some());
-        assert!(res.full_rbf.is_some());
     } else {
         assert!(res.incremental_relay_fee.is_none());
+    }
+
+    // Core 32 omits fullrbf unless started with -deprecatedrpc=fullrbf.
+    if (240000..320000).contains(&version()) {
+        assert!(res.full_rbf.is_some());
+    } else {
         assert!(res.full_rbf.is_none());
     }
 }

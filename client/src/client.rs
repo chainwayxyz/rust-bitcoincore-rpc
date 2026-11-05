@@ -123,6 +123,16 @@ impl Into<OutPoint> for JsonOutPoint {
     }
 }
 
+/// Core 32 defaults `createpsbt`, `walletcreatefundedpsbt`, and `psbtbumpfee` to PSBT version 2.
+const CORE_PSBT_V2: usize = 320000;
+
+/// rust-bitcoin 0.32 rejects PSBT versions other than 0, so request version 0 from Core 32+.
+/// `createpsbt` and `walletcreatefundedpsbt` always use version 0 there. `psbtbumpfee` uses it
+/// only when the caller does not set `BumpFeeOptions::psbt_version`.
+fn requests_psbt_v0(node_version: usize) -> bool {
+    node_version >= CORE_PSBT_V2
+}
+
 /// Shorthand for converting a variable into a serde_json::Value.
 fn into_json<T>(val: T) -> Result<serde_json::Value>
 where
@@ -345,10 +355,11 @@ pub trait RpcApi: Sized {
         txid: &bitcoin::Txid,
         options: Option<&json::BumpFeeOptions>,
     ) -> Result<json::BumpFeeResult> {
-        let opts = match options {
-            Some(options) => Some(options.to_serializable(self.version().await?)),
-            None => None,
-        };
+        let node_version = self.version().await?;
+        let mut opts = options.map(|options| options.to_serializable(node_version));
+        if requests_psbt_v0(node_version) {
+            opts.get_or_insert_with(Default::default).psbt_version.get_or_insert(0);
+        }
         let mut args = [into_json(txid)?, opt_into_json(opts)?];
         self.call("psbtbumpfee", handle_defaults(&mut args, &[null()])).await
     }
@@ -881,16 +892,18 @@ pub trait RpcApi: Sized {
         let outs_converted = serde_json::Map::from_iter(
             outputs.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
         );
-        self.call(
-            "createpsbt",
-            &[
-                into_json(inputs)?,
-                into_json(outs_converted)?,
-                into_json(locktime)?,
-                into_json(replaceable)?,
-            ],
-        )
-        .await
+        let mut args = vec![
+            into_json(inputs)?,
+            into_json(outs_converted)?,
+            into_json(locktime)?,
+            into_json(replaceable)?,
+        ];
+        if requests_psbt_v0(self.version().await?) {
+            // params[4] is the transaction version; null keeps Core's default.
+            args.push(null());
+            args.push(0.into());
+        }
+        self.call("createpsbt", &args).await
     }
 
     async fn create_raw_transaction_hex(
@@ -1289,13 +1302,21 @@ pub trait RpcApi: Sized {
         let outputs = outputs.into();
         let outputs_converted = serde_json::to_value(&outputs).unwrap();
 
-        let mut args = [
+        let mut args = vec![
             into_json(inputs)?,
             into_json(outputs_converted)?,
             opt_into_json(locktime)?,
             opt_into_json(options)?,
             opt_into_json(bip32derivs)?,
         ];
+        if requests_psbt_v0(self.version().await?) {
+            // params[5] is the transaction version; null keeps Core's default.
+            // Passing the nulls through avoids handle_defaults rewriting an
+            // omitted bip32derivs into false.
+            args.push(null());
+            args.push(0.into());
+            return self.call("walletcreatefundedpsbt", &args).await;
+        }
         self.call(
             "walletcreatefundedpsbt",
             handle_defaults(&mut args, &[0.into(), serde_json::Map::new().into(), false.into()]),

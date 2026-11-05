@@ -797,8 +797,9 @@ pub struct WalletTxInfo {
     pub txid: bitcoin::Txid,
     pub time: u64,
     pub timereceived: u64,
+    /// Omitted by Bitcoin Core 32+ unless the node is started with `-deprecatedrpc=bip125`.
     #[serde(rename = "bip125-replaceable")]
-    pub bip125_replaceable: Bip125Replaceable,
+    pub bip125_replaceable: Option<Bip125Replaceable>,
     /// Conflicting transaction ids
     #[serde(rename = "walletconflicts")]
     pub wallet_conflicts: Vec<bitcoin::Txid>,
@@ -1255,9 +1256,10 @@ pub struct GetMempoolEntryResult {
     /// Unconfirmed transactions spending outputs from this transaction
     #[serde(rename = "spentby")]
     pub spent_by: Vec<bitcoin::Txid>,
-    /// Whether this transaction could be replaced due to BIP125 (replace-by-fee)
+    /// Whether this transaction could be replaced due to BIP125 (replace-by-fee).
+    /// Omitted by Bitcoin Core 32+ unless the node is started with `-deprecatedrpc=bip125`.
     #[serde(rename = "bip125-replaceable")]
-    pub bip125_replaceable: bool,
+    pub bip125_replaceable: Option<bool>,
     /// Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)
     /// Added in Bitcoin Core v0.21
     pub unbroadcast: Option<bool>,
@@ -2155,6 +2157,10 @@ pub struct BumpFeeOptions {
     pub replaceable: Option<bool>,
     /// The fee estimate mode
     pub estimate_mode: Option<EstimateMode>,
+    /// PSBT version for `psbtbumpfee` (Bitcoin Core 32+). If unset, `psbt_bump_fee` requests
+    /// version 0 from Core 32+, because rust-bitcoin cannot parse version 2.
+    /// `bumpfee` accepts this option but ignores it.
+    pub psbt_version: Option<u32>,
 }
 
 impl BumpFeeOptions {
@@ -2172,6 +2178,7 @@ impl BumpFeeOptions {
             conf_target: self.conf_target,
             replaceable: self.replaceable,
             estimate_mode: self.estimate_mode,
+            psbt_version: self.psbt_version,
         }
     }
 }
@@ -2183,7 +2190,7 @@ pub struct SerializableBumpFeeOptions {
     /// Confirmation target in blocks.
     pub conf_target: Option<u16>,
     /// Specify a fee rate instead of relying on the built-in fee estimator.
-    #[serde(rename = "fee_rate")]
+    #[serde(rename = "fee_rate", skip_serializing_if = "Option::is_none")]
     pub fee_rate: Option<f64>,
     /// Whether this transaction could be replaced due to BIP125 (replace-by-fee)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2191,6 +2198,9 @@ pub struct SerializableBumpFeeOptions {
     /// The fee estimate mode
     #[serde(rename = "estimate_mode", skip_serializing_if = "Option::is_none")]
     pub estimate_mode: Option<EstimateMode>,
+    /// PSBT version. Core 32 defaults `psbtbumpfee` to version 2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub psbt_version: Option<u32>,
 }
 
 #[derive(Deserialize, Clone, PartialEq, Eq, Debug)]

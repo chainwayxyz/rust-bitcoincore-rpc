@@ -2199,7 +2199,7 @@ pub struct SerializableBumpFeeOptions {
     #[serde(rename = "estimate_mode", skip_serializing_if = "Option::is_none")]
     pub estimate_mode: Option<EstimateMode>,
     /// PSBT version. Core 32 defaults `psbtbumpfee` to version 2.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "psbt_version", skip_serializing_if = "Option::is_none")]
     pub psbt_version: Option<u32>,
 }
 
@@ -2540,6 +2540,27 @@ mod tests {
             serde_json::json!({
                 "mempool_only": false,
                 "return_spending_tx": true,
+            })
+        );
+    }
+
+    #[test]
+    fn test_serializable_bump_fee_options() {
+        let options = SerializableBumpFeeOptions {
+            conf_target: Some(6),
+            fee_rate: Some(2.5),
+            replaceable: Some(true),
+            estimate_mode: Some(EstimateMode::Economical),
+            psbt_version: Some(0),
+        };
+        assert_eq!(
+            serde_json::to_value(options).unwrap(),
+            serde_json::json!({
+                "conf_target": 6,
+                "fee_rate": 2.5,
+                "replaceable": true,
+                "estimate_mode": "ECONOMICAL",
+                "psbt_version": 0,
             })
         );
     }
